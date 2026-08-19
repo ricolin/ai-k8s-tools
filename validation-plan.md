@@ -123,16 +123,45 @@ kubectl get node "${gpu_node}" -o yaml \
 
 On the H200 host, capture `nvidia-smi -q`, driver packages, containerd
 configuration, and NVIDIA Container Toolkit versions using the site's
-approved node-access method. Configure containerd only when the inspection
-shows that it is missing:
+approved node-access method. On an Ubuntu node that does not yet have the
+driver/toolkit stack, use the repository installer and reboot before
+continuing:
 
 ```bash
-sudo nvidia-ctk runtime configure --runtime=containerd
-sudo systemctl restart containerd
+sudo env CONTAINER_RUNTIME=containerd \
+  EGRESS_PROXY="${EGRESS_PROXY:-}" \
+  ./scripts/bootstrap_gpu_runtime.sh
+sudo systemctl reboot
 ```
 
-This is a disruptive node operation. Drain or otherwise protect running
-workloads before restarting containerd.
+The installer preserves an existing Ubuntu server-open driver branch, installs
+its matching `nvidia-utils` and Fabric Manager packages, installs the target
+kernel's headers, preserves its `linux-modules-extra` package for InfiniBand,
+verifies the NVIDIA kernel module, and configures NVIDIA as containerd's
+default runtime. It records the selected runtime, package contract, and
+whether a kubelet Memory Manager checkpoint was present in
+`/var/lib/ai-build-tools/runtime-install.json`.
+
+If the install record reports a Memory Manager checkpoint, complete this only
+after the node is drained and the absence of user workloads is recorded:
+
+```bash
+sudo systemctl stop kubelet
+sudo install -D -m 0600 /var/lib/kubelet/memory_manager_state \
+  /var/lib/ai-build-tools/evidence/memory_manager_state.before-gpu-driver
+sudo rm /var/lib/kubelet/memory_manager_state
+sudo systemctl reboot
+```
+
+The checkpoint contains topology state from before the driver was loaded.
+Kubelet recreates it against the post-driver NUMA map after reboot. Never
+remove this state from an undrained node; Kubernetes can reject the old state
+with `the expected machine state is different from the real one`.
+
+Driver installation and reboot are disruptive node operations. Drain or
+otherwise protect running workloads before using this path on an existing
+cluster node. Do not restart containerd underneath active workloads and call
+the result an accepted run.
 
 Exit condition: the host sees exactly the expected H200 devices, Fabric
 Manager/driver health is accepted by the site, and containerd has a working
@@ -149,9 +178,27 @@ export NVIDIA_DEVICE_PLUGIN_VERSION=REPLACE_WITH_REVIEWED_VERSION
 chart_url=https://nvidia.github.io/k8s-device-plugin/stable/\
 nvidia-device-plugin-${NVIDIA_DEVICE_PLUGIN_VERSION#v}.tgz
 
+kubectl label node "${gpu_node}" nvidia.com/gpu.present=true --overwrite
+cat > "${EVIDENCE_DIR}/cluster/device-plugin-values.yaml" <<'EOF'
+nfd:
+  enabled: false
+gfd:
+  enabled: false
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+EOF
+
 helm upgrade --install nvidia-device-plugin \
   --namespace nvidia-device-plugin \
   --create-namespace \
+  --values "${EVIDENCE_DIR}/cluster/device-plugin-values.yaml" \
   "${chart_url}"
 
 plugin_daemonset=$(kubectl get daemonset -n nvidia-device-plugin \
@@ -246,6 +293,32 @@ kubectl get pod -n "${WORKLOAD_NAMESPACE}" "${pytorch_pod}" -o yaml \
 Exit condition: both workloads request one `nvidia.com/gpu`, run on the
 selected physical node, and succeed. The PyTorch log must report an H200-class
 device and a successful tensor operation.
+
+Before beginning training, run a whole-node allocation smoke. This is stronger
+than a capacity label but is not a substitute for the DDP/NCCL evidence in G5:
+
+```bash
+envsubst < kubernetes-CUDA/templates/pytorch-all-gpu-job.yaml \
+  > "${EVIDENCE_DIR}/smoke/pytorch-all-gpu-job.yaml"
+kubectl apply --dry-run=server \
+  -f "${EVIDENCE_DIR}/smoke/pytorch-all-gpu-job.yaml"
+kubectl apply -f "${EVIDENCE_DIR}/smoke/pytorch-all-gpu-job.yaml"
+kubectl wait -n "${WORKLOAD_NAMESPACE}" --for=condition=complete \
+  job/ai-build-tools-pytorch-all-gpu --timeout=10m
+kubectl logs -n "${WORKLOAD_NAMESPACE}" \
+  job/ai-build-tools-pytorch-all-gpu \
+  | tee "${EVIDENCE_DIR}/smoke/pytorch-all-gpu.log"
+grep -F "\"device_count\": ${TRAIN_GPU_COUNT}" \
+  "${EVIDENCE_DIR}/smoke/pytorch-all-gpu.log"
+kubectl get job -n "${WORKLOAD_NAMESPACE}" \
+  ai-build-tools-pytorch-all-gpu -o yaml \
+  > "${EVIDENCE_DIR}/smoke/pytorch-all-gpu-observed.yaml"
+```
+
+Exit condition: one pod receives `${TRAIN_GPU_COUNT}` GPUs and completes a
+CUDA operation on each visible device. Keep the observed device list as
+evidence. Do not label this `single-node-ddp`; it has not launched ranks or
+qualified NCCL collectives.
 
 ## 8. Gates G4-G5: one-GPU pilot, then eight-GPU training
 

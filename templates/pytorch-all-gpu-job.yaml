@@ -2,11 +2,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ai-build-tools-pytorch-cuda
+  name: ai-build-tools-pytorch-all-gpu
   namespace: ${WORKLOAD_NAMESPACE}
   labels:
     app.kubernetes.io/name: ai-build-tools-cuda-validation
-    ai-build-tools.ricolin.dev/gate: pytorch-cuda
+    ai-build-tools.ricolin.dev/gate: pytorch-all-gpu
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 86400
@@ -26,35 +26,47 @@ spec:
           operator: Exists
           effect: NoSchedule
       containers:
-        - name: pytorch-cuda
+        - name: pytorch-all-gpu
           image: ${PYTORCH_CUDA_IMAGE}
           imagePullPolicy: IfNotPresent
+          env:
+            - name: EXPECTED_GPU_COUNT
+              value: "${TRAIN_GPU_COUNT}"
           command:
             - python3
             - -c
             - |
               import json
+              import os
+
               import torch
 
+              expected = int(os.environ["EXPECTED_GPU_COUNT"])
               assert torch.cuda.is_available(), "PyTorch CUDA is unavailable"
-              assert torch.cuda.device_count() == 1, torch.cuda.device_count()
-              left = torch.arange(
-                  16, device="cuda", dtype=torch.float32
-              ).reshape(4, 4)
-              right = torch.eye(4, device="cuda")
-              result = left @ right
-              torch.cuda.synchronize()
-              assert torch.equal(result, left)
-              properties = torch.cuda.get_device_properties(0)
+              assert torch.cuda.device_count() == expected, (
+                  torch.cuda.device_count(), expected
+              )
+              devices = []
+              for index in range(expected):
+                  with torch.cuda.device(index):
+                      left = torch.arange(
+                          16, device="cuda", dtype=torch.float32
+                      ).reshape(4, 4)
+                      result = left @ torch.eye(4, device="cuda")
+                      torch.cuda.synchronize()
+                      assert torch.equal(result, left)
+                      devices.append({
+                          "index": index,
+                          "name": torch.cuda.get_device_name(index),
+                          "sum": result.sum().item(),
+                      })
               print(json.dumps({
                   "cuda_available": True,
                   "cuda_version": torch.version.cuda,
                   "device_count": torch.cuda.device_count(),
-                  "device_name": torch.cuda.get_device_name(0),
-                  "device_total_memory": properties.total_memory,
+                  "devices": devices,
                   "torch_version": torch.__version__,
-                  "tensor_sum": result.sum().item(),
               }, sort_keys=True))
           resources:
             limits:
-              nvidia.com/gpu: "1"
+              nvidia.com/gpu: "${TRAIN_GPU_COUNT}"

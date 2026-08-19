@@ -18,17 +18,39 @@ kubernetes-CUDA/
 └── templates/
     ├── h200-validation.env.example
     ├── nvidia-smi-pod.yaml
+    ├── pytorch-all-gpu-job.yaml
     └── pytorch-cuda-job.yaml
 ```
 
 - [validation-plan.md](validation-plan.md) is the reproducible implementation
   and validation runbook.
+- [`../scripts/bootstrap_gpu_runtime.sh`](../scripts/bootstrap_gpu_runtime.sh)
+  installs the accepted Ubuntu server-open driver, Fabric Manager, matching
+  kernel headers/extras, and NVIDIA Container Toolkit. It verifies that the
+  NVIDIA module exists for the selected boot kernel before reporting success.
+  Set
+  `CONTAINER_RUNTIME=containerd` for Kubernetes nodes; its default remains
+  `docker` for the standalone image workflow.
 - `h200-validation.env.example` separates training, generation, and serving
   GPU counts and supplies site-owned scheduling values.
 - `nvidia-smi-pod.yaml` proves that Kubernetes can allocate one GPU and expose
   it to a container.
 - `pytorch-cuda-job.yaml` proves PyTorch CUDA execution and records the device
   identity seen by the container.
+- `pytorch-all-gpu-job.yaml` requests the configured training GPU count and
+  performs an independent CUDA tensor operation on every allocated device. It
+  proves whole-node visibility but does not claim DDP or NCCL qualification.
+
+The validation workloads tolerate the standard control-plane taint because a
+single physical H200 may provide both the control plane and the validation
+capacity. The H200 node selector remains mandatory, so this does not permit
+the workloads to spill onto ordinary control-plane nodes.
+
+When kubelet uses the Static Memory Manager, install the runtime only during a
+drained maintenance window. Loading the GPU driver can change the NUMA memory
+map and invalidate `/var/lib/kubelet/memory_manager_state`; follow the guarded
+checkpoint procedure in [validation-plan.md](validation-plan.md) before the
+required reboot.
 
 ## Intended workflow
 
