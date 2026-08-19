@@ -40,3 +40,6 @@ by a physical-GPU implementation. Fixture results are mechanics evidence and
 must never be represented as physical GPU or model-quality evidence.
 
 See [the full workflow and operations guide](../docs/kubernetes-workflow.md).
+Physical CUDA integration remains a separate gated workstream; its detailed
+plan and reusable H200 validation templates are in
+[kubernetes-CUDA](../kubernetes-CUDA/README.md).
