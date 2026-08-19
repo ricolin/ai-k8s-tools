@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: registry-ai-build-tools-route
+  namespace: ai-release-registry
+spec:
+  ingressClassName: atmosphere
+  rules:
+  - host: container-infra-registry.38-108-68-83.nip.io
+    http:
+      paths:
+      - backend:
+          service:
+            name: registry
+            port:
+              number: 5000
+        path: /v2/ai-build-tools
+        pathType: Prefix
