@@ -4,8 +4,8 @@ set -euo pipefail
 root_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 source "${root_dir}/kubernetes/versions.env"
 
-: "${KUBECONFIG:?set KUBECONFIG to the target mCAPI cluster}"
-profile_file=${PROFILE_FILE:-${root_dir}/kubernetes/profiles/aio-emulated.env}
+: "${KUBECONFIG:?set KUBECONFIG to the target Kubernetes cluster}"
+profile_file=${PROFILE_FILE:-${root_dir}/kubernetes/profiles/kubernetes-fixture.env}
 source "${profile_file}"
 
 source_root=${SOURCE_ROOT:-/opt/ai-build-tools-sources}
@@ -99,7 +99,7 @@ done
 ${kubectl} wait --for=condition=Established crd/inferenceservices.serving.kserve.io --timeout=120s
 ${kubectl} wait -n kubeflow --for=condition=Available deployment/kserve-controller-manager --timeout=600s
 
-${kubectl} apply -f "${root_dir}/kubernetes/manifests/aio-integration.yaml"
+${kubectl} apply -f "${root_dir}/kubernetes/manifests/workflow-integration.yaml"
 access_key=$(${kubectl} -n kubeflow get secret mlpipeline-minio-artifact -o jsonpath='{.data.accesskey}' | base64 -d)
 secret_key=$(${kubectl} -n kubeflow get secret mlpipeline-minio-artifact -o jsonpath='{.data.secretkey}' | base64 -d)
 ${kubectl} -n "${WORKLOAD_NAMESPACE}" create secret generic ai-build-tools-s3 \

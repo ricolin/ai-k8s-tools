@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${KUBECONFIG:?set KUBECONFIG to the target mCAPI cluster}"
+: "${KUBECONFIG:?set KUBECONFIG to the target Kubernetes cluster}"
 kubectl_bin=${KUBECTL_BIN:-/opt/ai-build-tools-bin/kubectl}
 [[ -x ${kubectl_bin} ]] || kubectl_bin=$(command -v kubectl)
 
@@ -21,7 +21,7 @@ for deployment in mysql seaweedfs ml-pipeline ml-pipeline-ui model-registry-db \
 done
 
 if ${kubectl_bin} get nodes -o json | jq -e '.items[].status.allocatable["nvidia.com/gpu"]' >/dev/null; then
-  echo "NVIDIA resources are advertised; physical validation still requires the physical profile"
+  echo "NVIDIA resources are advertised; validate the selected physical profile separately"
 else
-  echo "PASS: platform ready with emulated mechanics evidence; no NVIDIA resource claim"
+  echo "PASS: platform ready for mechanics workflows; no NVIDIA resource claim"
 fi

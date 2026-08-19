@@ -8,9 +8,19 @@ fi
 revision=$1
 evidence_dir=$2
 root_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-host_kubeconfig=${HOST_KUBECONFIG:-/etc/kubernetes/admin.conf}
-registry_host=${REGISTRY_HOST:-container-infra-registry.38-108-68-83.nip.io}
+profile_file=${PROFILE_FILE:-${root_dir}/kubernetes/profiles/mcapi-emulated.env}
+source "${profile_file}"
+host_kubeconfig=${HOST_KUBECONFIG:-}
+registry_host=${REGISTRY_HOST:-}
 registry_namespace=${REGISTRY_NAMESPACE:-ai-release-registry}
+registry_route_manifest=${REGISTRY_ROUTE_MANIFEST:-}
+: "${host_kubeconfig:?set HOST_KUBECONFIG to the cluster hosting the registry}"
+: "${registry_host:?set REGISTRY_HOST to the externally reachable registry name}"
+[[ -r ${host_kubeconfig} ]] || { echo "cannot read HOST_KUBECONFIG: ${host_kubeconfig}" >&2; exit 1; }
+if [[ -n ${registry_route_manifest} && ! -r ${registry_route_manifest} ]]; then
+  echo "cannot read REGISTRY_ROUTE_MANIFEST: ${registry_route_manifest}" >&2
+  exit 1
+fi
 port_forward_pid=
 restored=false
 mkdir -p "${evidence_dir}"
@@ -29,7 +39,9 @@ restore_registry() {
   if [[ -s ${evidence_dir}/registry-ingresses.clean.json ]]; then
     kube apply -f "${evidence_dir}/registry-ingresses.clean.json" >/dev/null
   fi
-  kube apply -f "${root_dir}/kubernetes/manifests/aio-registry-ingress.yaml" >/dev/null
+  if [[ -n ${registry_route_manifest} ]]; then
+    kube apply -f "${registry_route_manifest}" >/dev/null
+  fi
   restored=true
 }
 

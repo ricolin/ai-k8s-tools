@@ -12,9 +12,10 @@ root_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 if [[ ${evidence_dir} != /* ]]; then
   evidence_dir="${root_dir}/${evidence_dir}"
 fi
-source "${root_dir}/kubernetes/profiles/aio-emulated.env"
+profile_file=${PROFILE_FILE:-${root_dir}/kubernetes/profiles/kubernetes-fixture.env}
+source "${profile_file}"
 source "${images_env}"
-: "${KUBECONFIG:?set KUBECONFIG to the target mCAPI cluster}"
+: "${KUBECONFIG:?set KUBECONFIG to the target Kubernetes cluster}"
 : "${AI_BUILD_TOOLS_WORKFLOW_IMAGE:?missing workflow image}"
 : "${AI_BUILD_TOOLS_RUNTIME_IMAGE:?missing runtime image}"
 [[ ${run_label} =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] || { echo "invalid run label" >&2; exit 2; }
@@ -36,11 +37,15 @@ fi
 
 cd "${root_dir}/kubernetes/workflows"
 "${uv_bin}" sync --python 3.12 --frozen
+s3_scheme=http
+if [[ ${S3_USE_HTTPS} == 1 ]]; then
+  s3_scheme=https
+fi
 "${uv_bin}" run --frozen python -m ai_build_tools_k8s.pipeline \
   --workflow-image "${AI_BUILD_TOOLS_WORKFLOW_IMAGE}" \
   --node-selector-key "${NODE_SELECTOR_KEY}" \
   --node-selector-value "${NODE_SELECTOR_VALUE}" \
-  --s3-endpoint-url "http://${S3_ENDPOINT}" \
+  --s3-endpoint-url "${s3_scheme}://${S3_ENDPOINT}" \
   --output-dir "${evidence_dir}/compiled"
 
 kfp_pid=
@@ -54,10 +59,10 @@ cleanup() {
   done
 }
 trap cleanup EXIT INT TERM
-"${kubectl_bin}" -n kubeflow port-forward service/ml-pipeline 8888:8888 \
+"${kubectl_bin}" -n "${KFP_NAMESPACE}" port-forward service/ml-pipeline 8888:8888 \
   >"${evidence_dir}/kfp-port-forward.log" 2>&1 &
 kfp_pid=$!
-"${kubectl_bin}" -n kubeflow port-forward service/model-registry-service 8081:8080 \
+"${kubectl_bin}" -n "${KFP_NAMESPACE}" port-forward service/model-registry-service 8081:8080 \
   >"${evidence_dir}/hub-port-forward.log" 2>&1 &
 registry_pid=$!
 for _ in $(seq 1 60); do
@@ -75,14 +80,21 @@ curl -fsS http://127.0.0.1:8081/api/model_registry/v1alpha3/registered_models \
   --deploy-pipeline "${evidence_dir}/compiled/sdxl-lora-deploy-verify-release.yaml" \
   --runtime-image "${AI_BUILD_TOOLS_RUNTIME_IMAGE}" \
   --run-label "${run_label}" \
+  --profile "${PROFILE_NAME}" \
+  --evidence-class "${EVIDENCE_CLASS}" \
+  --evidence-level "${EVIDENCE_LEVEL}" \
+  --workload-namespace "${WORKLOAD_NAMESPACE}" \
+  --registry-service-host "${MODEL_REGISTRY_HOST}" \
+  --registry-service-port "${MODEL_REGISTRY_PORT}" \
   --output "${evidence_dir}/workflow-result.json"
 
 curl -fsS http://127.0.0.1:8081/api/model_registry/v1alpha3/registered_models \
   >"${evidence_dir}/hub-after.json"
 "${kubectl_bin}" get nodes -o json >"${evidence_dir}/nodes.json"
-"${kubectl_bin}" -n kubeflow get pod,pvc,workflow -o yaml >"${evidence_dir}/kubeflow-resources.yaml"
-"${kubectl_bin}" -n ai-workflows get inferenceservice,deployment,pod,service -o yaml \
+"${kubectl_bin}" -n "${KFP_NAMESPACE}" get pod,pvc,workflow -o yaml >"${evidence_dir}/kubeflow-resources.yaml"
+"${kubectl_bin}" -n "${WORKLOAD_NAMESPACE}" get inferenceservice,deployment,pod,service -o yaml \
   >"${evidence_dir}/serving-resources.yaml"
-jq -e '.status == "PASS" and .evidence_level == "mechanics"' \
+jq -e --arg evidence_level "${EVIDENCE_LEVEL}" \
+  '.status == "PASS" and .evidence_level == $evidence_level' \
   "${evidence_dir}/workflow-result.json"
 echo "PASS: Kubeflow train/release/derive and KServe deployment mechanics completed"

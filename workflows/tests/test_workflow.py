@@ -8,7 +8,9 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from kfp import compiler
 
+from ai_build_tools_k8s.pipeline import make_deployment_pipeline, make_training_pipeline
 from ai_build_tools_k8s.server import ModelServer, handler_factory
 from ai_build_tools_k8s.workflow import (
     artifact_digest,
@@ -165,6 +167,19 @@ def test_inference_service_has_separate_base_and_adapter_mounts() -> None:
         {"uri": "s3://bucket/adapter", "mountPath": "/mnt/models/adapter"},
     ]
     assert manifest["metadata"]["annotations"]["serving.kserve.io/deploymentMode"] == "Standard"
+
+
+def test_pipeline_defaults_are_provider_neutral(tmp_path: Path) -> None:
+    image = "registry.example.com/ai-build-tools@sha256:" + ("a" * 64)
+    packages = {
+        "train.yaml": make_training_pipeline(image, "", "", "http://s3.example"),
+        "deploy.yaml": make_deployment_pipeline(image, "", ""),
+    }
+    for name, pipeline in packages.items():
+        output = tmp_path / name
+        compiler.Compiler().compile(pipeline, str(output))
+        rendered = output.read_text()
+        assert "defaultValue: kubernetes-fixture" in rendered
 
 
 def test_runtime_health_and_prediction(tmp_path: Path) -> None:

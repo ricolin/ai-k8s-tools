@@ -57,6 +57,16 @@ def main() -> None:
     parser.add_argument("--run-label", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=1800)
+    parser.add_argument("--profile", default="kubernetes-fixture")
+    parser.add_argument("--evidence-class", default="kubernetes-fixture")
+    parser.add_argument("--evidence-level", default="mechanics")
+    parser.add_argument("--author", default="ai-build-tools")
+    parser.add_argument("--workload-namespace", default="ai-workflows")
+    parser.add_argument(
+        "--registry-service-host",
+        default="model-registry-service.kubeflow.svc.cluster.local",
+    )
+    parser.add_argument("--registry-service-port", type=int, default=8080)
     parser.add_argument("--model-name", default="cute-bear-mechanics")
     parser.add_argument("--base-model-ref", default="stabilityai/stable-diffusion-xl-base-1.0")
     parser.add_argument("--base-model-revision", default="462165984030d82259a11f4367a4eed129e94a7b")
@@ -67,17 +77,17 @@ def main() -> None:
     registry = ModelRegistry(
         server_address=normalize_http_endpoint(args.registry_host),
         port=args.registry_port,
-        author="ai-build-tools-aio",
+        author=args.author,
         is_secure=False,
     )
-    version_a = f"aio-a-{args.run_label}"
-    version_b = f"aio-b-{args.run_label}"
+    version_a = f"model-a-{args.run_label}"
+    version_b = f"model-b-{args.run_label}"
     evidence: dict[str, Any] = {
         "schema_version": "0.1.0",
         "run_label": args.run_label,
         "started_unix": int(time.time()),
-        "evidence_class": "emulated-mcapi",
-        "evidence_level": "mechanics",
+        "evidence_class": args.evidence_class,
+        "evidence_level": args.evidence_level,
         "runs": {},
         "models": {},
     }
@@ -87,14 +97,16 @@ def main() -> None:
         "base_model_ref": args.base_model_ref,
         "base_model_revision": args.base_model_revision,
         "dataset_digest": args.dataset_digest,
-        "profile": "aio-emulated",
-        "evidence_class": "emulated-mcapi",
-        "evidence_level": "mechanics",
+        "profile": args.profile,
+        "evidence_class": args.evidence_class,
+        "evidence_level": args.evidence_level,
         "pilot_steps": 4,
         "training_steps": 12,
         "rank": 4,
         "seed": 26081001,
         "expected_images": 3,
+        "registry_host": args.registry_service_host,
+        "registry_port": args.registry_service_port,
     }
     train_a = start_run(
         client,
@@ -118,6 +130,9 @@ def main() -> None:
             "base_uri": model_a["properties"]["base_artifact_uri"],
             "adapter_uri": model_a["artifact_uri"],
             "runtime_image": args.runtime_image,
+            "namespace": args.workload_namespace,
+            "registry_host": args.registry_service_host,
+            "registry_port": args.registry_service_port,
         },
         args.timeout,
     )
@@ -159,6 +174,9 @@ def main() -> None:
             "base_uri": model_b["properties"]["base_artifact_uri"],
             "adapter_uri": model_b["artifact_uri"],
             "runtime_image": args.runtime_image,
+            "namespace": args.workload_namespace,
+            "registry_host": args.registry_service_host,
+            "registry_port": args.registry_service_port,
         },
         args.timeout,
     )

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Build the workflow and fixture-serving images used by Kubernetes profiles.
+
 if [[ $# -ne 1 ]]; then
   echo "usage: $0 REVISION" >&2
   exit 2

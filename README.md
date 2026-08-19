@@ -1,12 +1,10 @@
 # Kubernetes AI workflows
 
-This tree adapts the accepted `ai-build-tools` SDXL LoRA method to Kubernetes
-without introducing the former Track 2 or Track 3 services. Kubeflow Pipelines
-owns orchestration and lineage, Kubeflow Hub owns model-version metadata, and
-KServe owns the inference deployment.
-
-The root-level scripts remain the accepted direct-host S4 workflow. They are
-not moved or silently changed by this integration.
+This tree provides the Kubernetes execution path for `ai-build-tools`.
+Kubeflow Pipelines owns orchestration, Kubeflow Hub records model-version
+metadata and lineage, and KServe owns inference deployment. The root-level
+scripts provide the repository's bare-metal execution path; both paths use the
+same immutable-input and release-evidence principles.
 
 ## Layout
 
@@ -17,11 +15,14 @@ kubernetes/
 ├── workflows/                 # KFP DSL, workflow tools and unit tests
 ├── serving/                   # Custom base-plus-adapter mechanics runtime
 ├── manifests/                 # Namespace, RBAC and KServe resources
-└── aio/                       # Retained mCAPI AIO build/run helpers
+├── tools/                     # Provider-neutral build and run helpers
+└── mcapi/                     # mCAPI egress and registry integration helpers
 ```
 
-The AIO profile exercises the complete mechanics path with deterministic
-fixture artifacts because its virtio GPU is not an NVIDIA CUDA device:
+The default `kubernetes-fixture` profile has no provider-specific placement.
+The `mcapi-emulated` example profile exercises the complete mechanics path
+with deterministic fixture artifacts on a Kubernetes cluster that does not
+advertise an NVIDIA CUDA resource:
 
 ```text
 train candidate A
@@ -34,8 +35,8 @@ train candidate A
   -> generate, evaluate and register B with parent=A
 ```
 
-The physical profile replaces only the fixture training and serving images
-with the accepted CUDA/Diffusers images and requests real `nvidia.com/gpu`
-resources. An AIO PASS is mechanics evidence, never physical GPU evidence.
+The `nvidia-h200` profile describes the scheduling and storage inputs expected
+by a physical-GPU implementation. Fixture results are mechanics evidence and
+must never be represented as physical GPU or model-quality evidence.
 
 See [the full workflow and operations guide](../docs/kubernetes-workflow.md).
