@@ -16,10 +16,10 @@ research work separate from the standalone bare-metal workflow in
 - immutable evidence, dataset, source, release, and reports-only gates; and
 - local fixture validation that does not claim physical GPU proof.
 
-This repository does not contain an S4 address, kubeconfig, credential,
-private training dataset, model weight, registry token, or customer finding.
-Environment-specific commands and evidence stay in the corresponding private
-operations records.
+This repository does not contain a site-specific address, kubeconfig,
+credential, private training dataset, model weight, registry token, or
+customer finding. Environment-specific commands and evidence stay in the
+corresponding private operations records.
 
 ## Layout
 
