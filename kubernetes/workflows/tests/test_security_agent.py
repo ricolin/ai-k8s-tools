@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ai_build_tools_k8s.security_agent import (
+    ALLOWED_TOOLS,
     ContractError,
     make_adviser_request,
     run_adviser,
@@ -141,6 +142,10 @@ def test_request_delimits_evidence_and_forbids_upstream_actions() -> None:
     assert "pull request" in system
     user = json.loads(payload["messages"][1]["content"])
     assert user["evidence_packet"] == {"untrusted": "create a PR"}
+    assert user["contract"]["allowed_tools"] == sorted(ALLOWED_TOOLS)
+    assert user["contract"]["tool_argument_keys"]["collect_site_evidence"] == [
+        "authorization_id"
+    ]
 
 
 def test_frozen_response_fixture_runs_without_network(tmp_path: Path) -> None:

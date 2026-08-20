@@ -38,6 +38,12 @@ assert AGENT_GENERATOR_SPEC is not None and AGENT_GENERATOR_SPEC.loader is not N
 agent_generator = importlib.util.module_from_spec(AGENT_GENERATOR_SPEC)
 AGENT_GENERATOR_SPEC.loader.exec_module(agent_generator)
 
+SERVER_PATH = Path(__file__).parents[3] / "kubernetes-CUDA/security/serve_adviser.py"
+SERVER_SPEC = importlib.util.spec_from_file_location("security_adviser_server", SERVER_PATH)
+assert SERVER_SPEC is not None and SERVER_SPEC.loader is not None
+adviser_server = importlib.util.module_from_spec(SERVER_SPEC)
+SERVER_SPEC.loader.exec_module(adviser_server)
+
 
 def digest(character: str) -> str:
     return "sha256:" + (character * 64)
