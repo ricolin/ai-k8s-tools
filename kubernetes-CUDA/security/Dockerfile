@@ -19,6 +19,8 @@ RUN python3 -m venv --system-site-packages /opt/ai-venv \
 COPY kubernetes-CUDA/security/trainer.py ./trainer.py
 COPY kubernetes-CUDA/security/generate_demo_dataset.py ./generate_demo_dataset.py
 COPY kubernetes-CUDA/security/evaluate_adviser.py ./evaluate_adviser.py
+COPY kubernetes-CUDA/security/generate_agent_response.py ./generate_agent_response.py
+COPY kubernetes-CUDA/security/quality_gate.py ./quality_gate.py
 
 RUN useradd --create-home --uid 65532 --shell /usr/sbin/nologin ai-trainer
 USER 65532:65532

@@ -22,6 +22,18 @@ model, dataset, registry credential, kubeconfig, or site-specific endpoint.
   A completed C training Job may still be rejected and must then remain
   disconnected from serving and agent workflows.
 
+The Release C gate is executable and intentionally stricter than Job success:
+
+```bash
+python /opt/ai-build-tools-security/quality_gate.py \
+  --responses /workspace/runs/C-comparison/responses.jsonl \
+  --output /workspace/runs/C-comparison/quality-gate.json
+```
+
+It rejects unsupported consequences, requires the complete typed proof-plan
+contract, and requires C's deterministic score not to regress from B. A
+nonzero exit status prohibits release export, serving, and agent handoff.
+
 ## Build the trainer image
 
 Select a reviewed PyTorch CUDA base and resolve it to a digest. Generate the
@@ -106,3 +118,30 @@ read-only, and runs an identity verifier before vLLM starts:
 This directory can be syntax- and contract-tested without a GPU. A physical
 claim requires the observed Kubernetes Job, rank/device map, optimizer result,
 adapter identity, KServe readiness, and inference evidence from the H200 run.
+
+## Gate and hand off accepted C
+
+Run the deterministic quality gate against the frozen foundation/A/B/C
+responses. C is accepted only when every hard gate passes and its score is not
+lower than B:
+
+```bash
+python /opt/ai-build-tools-security/quality_gate.py \
+  --responses /workspace/runs/comparison/responses.jsonl \
+  --output /workspace/runs/comparison/quality-gate.json
+```
+
+Generate one typed agent response from only the accepted C adapter with greedy
+decoding. Start from `agent-generation-config.example.json` and
+`agent-response-prompt.example.json`, pin all identities, and use a new output
+directory for every attempt:
+
+```bash
+python /opt/ai-build-tools-security/generate_agent_response.py \
+  --config /workspace/releases/C/agent-generation.json
+```
+
+The result is still a candidate until `ai-security-agent run` validates it
+against the accepted release, analysis manifest, and synthetic evidence. A
+model response that swaps enum fields, adds an argument, or changes identity
+must be rejected rather than repaired silently.

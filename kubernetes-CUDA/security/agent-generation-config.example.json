@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "foundation_path": "/workspace/models/foundation",
+  "foundation_digest": "sha256:REPLACE_FOUNDATION_TREE_DIGEST",
+  "adapter_path": "/workspace/releases/C/adapter",
+  "adapter_digest": "sha256:REPLACE_ACCEPTED_C_ADAPTER_TREE_DIGEST",
+  "prompt_path": "/workspace/releases/C/agent-response-prompt.json",
+  "output_dir": "/workspace/runs/agent-response-RUN_ID",
+  "max_new_tokens": 1024
+}

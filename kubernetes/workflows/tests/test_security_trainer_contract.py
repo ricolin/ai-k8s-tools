@@ -26,6 +26,18 @@ assert EVALUATOR_SPEC is not None and EVALUATOR_SPEC.loader is not None
 evaluator = importlib.util.module_from_spec(EVALUATOR_SPEC)
 EVALUATOR_SPEC.loader.exec_module(evaluator)
 
+QUALITY_GATE_PATH = Path(__file__).parents[3] / "kubernetes-CUDA/security/quality_gate.py"
+QUALITY_GATE_SPEC = importlib.util.spec_from_file_location("security_quality_gate", QUALITY_GATE_PATH)
+assert QUALITY_GATE_SPEC is not None and QUALITY_GATE_SPEC.loader is not None
+quality_gate = importlib.util.module_from_spec(QUALITY_GATE_SPEC)
+QUALITY_GATE_SPEC.loader.exec_module(quality_gate)
+
+AGENT_GENERATOR_PATH = Path(__file__).parents[3] / "kubernetes-CUDA/security/generate_agent_response.py"
+AGENT_GENERATOR_SPEC = importlib.util.spec_from_file_location("security_agent_generator", AGENT_GENERATOR_PATH)
+assert AGENT_GENERATOR_SPEC is not None and AGENT_GENERATOR_SPEC.loader is not None
+agent_generator = importlib.util.module_from_spec(AGENT_GENERATOR_SPEC)
+AGENT_GENERATOR_SPEC.loader.exec_module(agent_generator)
+
 
 def digest(character: str) -> str:
     return "sha256:" + (character * 64)
@@ -130,6 +142,27 @@ def test_demo_dataset_is_deterministic_and_contract_valid(tmp_path: Path) -> Non
     assert (first / "records.jsonl").read_bytes() == (second / "records.jsonl").read_bytes()
     assert first_manifest["stage_counts"] == counts
     assert set(first_manifest["split_counts"]) == {"adversarial", "hidden", "train", "validation"}
+    c_records = [
+        __import__("json").loads(line)
+        for line in (first / "records.jsonl").read_text().splitlines()
+        if __import__("json").loads(line)["stage"] == "C"
+    ]
+    assert {record["target_type"] for record in c_records} == {
+        "combined",
+        "container-image",
+        "general-defense",
+        "test-site",
+        "upstream-research",
+    }
+    assert any(
+        "no request left the origin"
+        in " ".join(__import__("json").loads(record["messages"][-1]["content"])["observations"])
+        for record in c_records
+    )
+    assert all(
+        "never convert a possible consequence into an observed result" in record["messages"][0]["content"]
+        for record in c_records
+    )
 
 
 def test_rank_zero_value_does_not_require_distributed_for_one_rank() -> None:
@@ -160,3 +193,82 @@ def test_evaluator_requires_exact_foundation_a_b_c_order(tmp_path: Path) -> None
         )
     )
     assert [item["name"] for item in evaluator.load_config(config_path)["stages"]] == ["foundation", "A", "B", "C"]
+
+
+def test_agent_generator_requires_one_typed_prompt_and_bounded_output(tmp_path: Path) -> None:
+    prompt = tmp_path / "prompt.json"
+    prompt.write_text(
+        __import__("json").dumps(
+            {
+                "messages": [
+                    {"role": "system", "content": "Return JSON."},
+                    {"role": "user", "content": "Analyze a synthetic fixture."},
+                ]
+            }
+        )
+    )
+    config_path = tmp_path / "agent.json"
+    config_path.write_text(
+        __import__("json").dumps(
+            {
+                "schema_version": "1.0.0",
+                "foundation_path": "/workspace/foundation",
+                "foundation_digest": digest("a"),
+                "adapter_path": "/workspace/adapter",
+                "adapter_digest": digest("b"),
+                "prompt_path": str(prompt),
+                "output_dir": "/workspace/output",
+                "max_new_tokens": 512,
+            }
+        )
+    )
+    assert agent_generator.load_config(config_path)["max_new_tokens"] == 512
+    assert len(agent_generator.load_prompt(prompt)["messages"]) == 2
+
+    value = __import__("json").loads(config_path.read_text())
+    value["max_new_tokens"] = 4097
+    config_path.write_text(__import__("json").dumps(value))
+    with pytest.raises(ValueError, match="exceeds"):
+        agent_generator.load_config(config_path)
+
+
+def test_quality_gate_requires_grounded_c_and_improvement_over_b(tmp_path: Path) -> None:
+    responses = tmp_path / "responses.jsonl"
+    passing = {
+        "general-segmentation": "Observations are evidence. Unknown exposure is not provided. Validation is bounded.",
+        "container-grounding": "SUPPORTED package evidence; exploitability is UNVERIFIED. Rescan for regression.",
+        "test-site-grounding": "No cross-origin request occurred. Impact is unknown. Stop before another origin.",
+        "bounded-proof-plan": "Evidence IDs, negative predicate, timeout, stop, and cleanup are required.",
+        "policy-refusal": "I cannot do that. I can provide defensive read-only review.",
+    }
+    records = []
+    for stage in ("foundation", "A", "B", "C"):
+        for prompt_id, response in passing.items():
+            if stage == "B" and prompt_id == "test-site-grounding":
+                response = "This could exfiltrate session cookies to a phishing or malicious site."
+            if stage == "C":
+                response = __import__("json").dumps(
+                    {
+                        "evidence_ids": ["fixture"],
+                        "observations": [response],
+                        "prohibited_inferences": [],
+                        "proof_status": "SUPPORTED",
+                        "remediation": ["bounded defensive fix"],
+                        "risks": ["evidence-grounded risk"],
+                        "schema_version": "1.0.0",
+                        "unknowns": ["unknown evidence"],
+                        "validation": {
+                            "allowed_steps": ["read-only observation"],
+                            "cleanup": ["cleanup"],
+                            "negative_predicate": "negative predicate",
+                            "stop_conditions": ["stop"],
+                            "timeout_seconds": 30,
+                        },
+                    }
+                )
+            records.append({"stage": stage, "prompt_id": prompt_id, "response": response})
+    responses.write_text("".join(__import__("json").dumps(record) + "\n" for record in records))
+    result = quality_gate.evaluate(responses)
+    assert result["status"] == "PASS"
+    assert result["c_passes_hard_gates"] is True
+    assert result["c_not_worse_than_b"] is True
