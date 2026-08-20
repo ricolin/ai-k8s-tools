@@ -12,6 +12,7 @@ dependencies = [
 dev = [
   "kfp==2.16.0",
   "kfp-kubernetes==2.16.0",
+  "pillow==11.3.0",
   "pytest==8.4.1",
 ]
 

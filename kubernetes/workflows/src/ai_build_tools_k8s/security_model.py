@@ -176,8 +176,16 @@ def render_security_training_job(
     gpu_count: int,
     node_selector_key: str,
     node_selector_value: str,
+    image_pull_policy: str = "IfNotPresent",
+    node_local_image_id: str = "",
 ) -> dict[str, Any]:
-    _require_image_digest(trainer_image, "trainer_image")
+    _require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
+    if image_pull_policy == "Never":
+        _require(":" in trainer_image and "@" not in trainer_image, "node-local image must use an explicit tag")
+        _require_sha256(node_local_image_id, "node_local_image_id")
+    else:
+        _require_image_digest(trainer_image, "trainer_image")
+        _require(not node_local_image_id, "node_local_image_id is only valid with imagePullPolicy Never")
     _require(gpu_count >= 1, "gpu_count must be positive")
     _require(config_path.startswith("/workspace/"), "training config must be on the workspace volume")
     pod_spec: dict[str, Any] = {
@@ -188,7 +196,7 @@ def render_security_training_job(
             {
                 "name": "trainer",
                 "image": trainer_image,
-                "imagePullPolicy": "IfNotPresent",
+                "imagePullPolicy": image_pull_policy,
                 "command": ["torchrun"],
                 "args": [
                     "--standalone",
@@ -211,17 +219,26 @@ def render_security_training_job(
                     "allowPrivilegeEscalation": False,
                     "capabilities": {"drop": ["ALL"]},
                 },
-                "volumeMounts": [{"name": "workspace", "mountPath": "/workspace"}],
+                "volumeMounts": [
+                    {"name": "workspace", "mountPath": "/workspace"},
+                    {"name": "dshm", "mountPath": "/dev/shm"},
+                ],
             }
         ],
-        "volumes": [{"name": "workspace", "persistentVolumeClaim": {"claimName": pvc_name}}],
+        "volumes": [
+            {"name": "workspace", "persistentVolumeClaim": {"claimName": pvc_name}},
+            {"name": "dshm", "emptyDir": {"medium": "Memory", "sizeLimit": "32Gi"}},
+        ],
     }
     if node_selector_key and node_selector_value:
         pod_spec["nodeSelector"] = {node_selector_key: node_selector_value}
+    metadata: dict[str, Any] = {"name": name, "namespace": namespace}
+    if node_local_image_id:
+        metadata["annotations"] = {"ai-build-tools.ricolin.dev/node-local-image-id": node_local_image_id}
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
-        "metadata": {"name": name, "namespace": namespace},
+        "metadata": metadata,
         "spec": {
             "backoffLimit": 0,
             "template": {"metadata": {"labels": {"app": name}}, "spec": pod_spec},
@@ -399,6 +416,8 @@ def build_parser() -> argparse.ArgumentParser:
     training.add_argument("--gpu-count", type=int, required=True)
     training.add_argument("--node-selector-key", default="")
     training.add_argument("--node-selector-value", default="")
+    training.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="IfNotPresent")
+    training.add_argument("--node-local-image-id", default="")
     training.add_argument("--output", required=True)
 
     serving = commands.add_parser("render-adviser-serving")
@@ -459,6 +478,8 @@ def main() -> None:
                     args.gpu_count,
                     args.node_selector_key,
                     args.node_selector_value,
+                    args.image_pull_policy,
+                    args.node_local_image_id,
                 ),
             )
         elif args.command == "render-adviser-serving":

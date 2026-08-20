@@ -12,11 +12,13 @@ ${kubectl_bin} -n kubeflow get deployment,pod,service -o wide
 ${kubectl_bin} -n cert-manager get deployment,pod -o wide
 ${kubectl_bin} -n ai-workflows get serviceaccount,role,rolebinding,secret
 ${kubectl_bin} get crd workflows.argoproj.io scheduledworkflows.kubeflow.org \
+  experiments.kubeflow.org trials.kubeflow.org suggestions.kubeflow.org \
   inferenceservices.serving.kserve.io servingruntimes.serving.kserve.io \
   clusterservingruntimes.serving.kserve.io
 
 for deployment in mysql seaweedfs ml-pipeline ml-pipeline-ui model-registry-db \
-  model-registry-deployment kserve-controller-manager; do
+  model-registry-deployment katib-controller katib-db-manager katib-mysql \
+  katib-ui kserve-controller-manager; do
   ${kubectl_bin} -n kubeflow wait --for=condition=Available "deployment/${deployment}" --timeout=60s
 done
 

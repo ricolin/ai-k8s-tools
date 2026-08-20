@@ -135,12 +135,52 @@ def test_training_job_is_eight_gpu_offline_and_non_privileged() -> None:
     assert {item["name"]: item["value"] for item in container["env"]}["HF_HUB_OFFLINE"] == "1"
     assert pod["automountServiceAccountToken"] is False
     assert container["securityContext"]["capabilities"] == {"drop": ["ALL"]}
+    assert {mount["name"]: mount["mountPath"] for mount in container["volumeMounts"]}["dshm"] == "/dev/shm"
+    assert next(volume for volume in pod["volumes"] if volume["name"] == "dshm")["emptyDir"] == {
+        "medium": "Memory",
+        "sizeLimit": "32Gi",
+    }
 
 
 def test_training_job_rejects_mutable_image() -> None:
     with pytest.raises(ContractError, match="digest-pinned"):
         render_security_training_job(
             "adviser-a", "ai-workflows", "registry/trainer:latest", "pvc", "/workspace/a.json", 8, "", ""
+        )
+
+
+def test_training_job_accepts_guarded_node_local_image() -> None:
+    image_id = digest("e")
+    job = render_security_training_job(
+        "adviser-a",
+        "ai-workflows",
+        "ai-k8s-tools.local/security-trainer:validation-260820",
+        "model-workspace",
+        "/workspace/configs/a.json",
+        8,
+        "accelerator",
+        "h200",
+        "Never",
+        image_id,
+    )
+    assert job["metadata"]["annotations"] == {
+        "ai-build-tools.ricolin.dev/node-local-image-id": image_id,
+    }
+    assert job["spec"]["template"]["spec"]["containers"][0]["imagePullPolicy"] == "Never"
+
+
+def test_node_local_training_image_requires_runtime_identity() -> None:
+    with pytest.raises(ContractError, match="node_local_image_id"):
+        render_security_training_job(
+            "adviser-a",
+            "ai-workflows",
+            "ai-k8s-tools.local/security-trainer:validation-260820",
+            "pvc",
+            "/workspace/a.json",
+            8,
+            "",
+            "",
+            "Never",
         )
 
 

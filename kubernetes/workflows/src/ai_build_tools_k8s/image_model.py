@@ -54,8 +54,16 @@ def render_image_job(
     mode: str,
     node_selector_key: str,
     node_selector_value: str,
+    image_pull_policy: str = "IfNotPresent",
+    node_local_image_id: str = "",
 ) -> dict[str, Any]:
-    require_image_digest(image, "image")
+    _require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
+    if image_pull_policy == "Never":
+        _require(":" in image and "@" not in image, "node-local image must use an explicit tag")
+        _require_sha256(node_local_image_id, "node_local_image_id")
+    else:
+        require_image_digest(image, "image")
+        _require(not node_local_image_id, "node_local_image_id is only valid with imagePullPolicy Never")
     _require(mode in {"train", "generate"}, "unsupported image job mode")
     _require(gpu_count >= 1, "gpu_count must be positive")
     _require(config_path.startswith("/workspace/"), "config must be on the workspace PVC")
@@ -68,6 +76,7 @@ def render_image_job(
             {
                 "name": mode,
                 "image": image,
+                "imagePullPolicy": image_pull_policy,
                 "command": ["python", f"/opt/ai-build-tools-image/{script}"],
                 "args": ["--config", config_path],
                 "env": [
@@ -80,17 +89,26 @@ def render_image_job(
                     "limits": {"nvidia.com/gpu": gpu_count, "cpu": "64", "memory": "512Gi"},
                 },
                 "securityContext": _pod_security(),
-                "volumeMounts": [{"name": "workspace", "mountPath": "/workspace"}],
+                "volumeMounts": [
+                    {"name": "workspace", "mountPath": "/workspace"},
+                    {"name": "dshm", "mountPath": "/dev/shm"},
+                ],
             }
         ],
-        "volumes": [{"name": "workspace", "persistentVolumeClaim": {"claimName": pvc}}],
+        "volumes": [
+            {"name": "workspace", "persistentVolumeClaim": {"claimName": pvc}},
+            {"name": "dshm", "emptyDir": {"medium": "Memory", "sizeLimit": "32Gi"}},
+        ],
     }
     if node_selector_key and node_selector_value:
         pod_spec["nodeSelector"] = {node_selector_key: node_selector_value}
+    metadata: dict[str, Any] = {"name": name, "namespace": namespace}
+    if node_local_image_id:
+        metadata["annotations"] = {"ai-build-tools.ricolin.dev/node-local-image-id": node_local_image_id}
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
-        "metadata": {"name": name, "namespace": namespace},
+        "metadata": metadata,
         "spec": {"backoffLimit": 0, "template": {"metadata": {"labels": {"app": name}}, "spec": pod_spec}},
     }
 
@@ -103,7 +121,15 @@ def create_release_manifest(
     evaluation_digest: str,
     validation_level: str,
 ) -> dict[str, Any]:
-    _require(name in {"release-a-watercolor", "release-b-watercolor-detail", "release-c-watercolor-complex"}, "invalid release name")
+    _require(
+        name in {
+            "release-a-watercolor",
+            "release-b-watercolor-detail",
+            "release-b-watercolor-impressionism",
+            "release-c-watercolor-complex",
+        },
+        "invalid release name",
+    )
     for field, value in (
         ("base_digest", base_digest),
         ("prompt_digest", prompt_digest),
@@ -114,6 +140,7 @@ def create_release_manifest(
     expected_adapters = {
         "release-a-watercolor": ["watercolor"],
         "release-b-watercolor-detail": ["watercolor", "detail"],
+        "release-b-watercolor-impressionism": ["watercolor", "impressionism"],
         "release-c-watercolor-complex": ["c-watercolor", "c-complex-detail"],
     }
     _require(
@@ -150,6 +177,8 @@ def build_parser() -> argparse.ArgumentParser:
     job.add_argument("--mode", choices=("train", "generate"), required=True)
     job.add_argument("--node-selector-key", default="")
     job.add_argument("--node-selector-value", default="")
+    job.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="IfNotPresent")
+    job.add_argument("--node-local-image-id", default="")
     job.add_argument("--output", required=True)
     return parser
 
@@ -172,6 +201,8 @@ def main() -> None:
                     args.mode,
                     args.node_selector_key,
                     args.node_selector_value,
+                    args.image_pull_policy,
+                    args.node_local_image_id,
                 ),
             )
     except ContractError as error:

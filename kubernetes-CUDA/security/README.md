@@ -17,8 +17,10 @@ model, dataset, registry credential, kubeconfig, or site-specific endpoint.
 - Hugging Face and Transformers offline modes are mandatory.
 - Only the final assistant response is included in the loss; prompt tokens are
   masked.
-- The output is a candidate LoRA adapter. Evaluation and blind review happen
-  before a Release C `advisor-release.json` is created.
+- The output is a candidate LoRA adapter. Deterministic evidence-grounding
+  evaluation happens before a Release C `advisor-release.json` is created.
+  A completed C training Job may still be rejected and must then remain
+  disconnected from serving and agent workflows.
 
 ## Build the trainer image
 

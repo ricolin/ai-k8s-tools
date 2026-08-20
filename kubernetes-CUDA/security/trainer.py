@@ -212,6 +212,17 @@ def gather_rank_identities(torch: Any, world_size: int, rank: int) -> list[dict[
     return sorted(identities, key=lambda item: item["rank"])
 
 
+def rank_zero_value(torch: Any, world_size: int, rank: int, local_rank: int, factory: Any) -> Any:
+    if world_size == 1:
+        return factory()
+    import torch.distributed as distributed
+
+    require(distributed.is_initialized(), "distributed process group is not initialized")
+    values = [factory() if rank == 0 else None]
+    distributed.broadcast_object_list(values, src=0, device=torch.device("cuda", local_rank))
+    return values[0]
+
+
 def train(config_path: Path) -> None:
     config = validate_training_config(load_config(config_path))
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -229,6 +240,11 @@ def train(config_path: Path) -> None:
     expected_gpu_count = int(config["training"]["expected_gpu_count"])
     require(world_size == expected_gpu_count, f"expected {expected_gpu_count} ranks, observed {world_size}")
     torch.cuda.set_device(local_rank)
+    if world_size > 1 and not torch.distributed.is_initialized():
+        torch.distributed.init_process_group(
+            backend="nccl",
+            device_id=torch.device("cuda", local_rank),
+        )
     set_seed(int(config["seed"]))
 
     foundation = Path(config["foundation_path"])
@@ -238,14 +254,27 @@ def train(config_path: Path) -> None:
     require(foundation.is_dir(), "foundation path is missing")
     require(tokenizer_path.is_dir(), "tokenizer path is missing")
     require(dataset_manifest.is_file(), "dataset manifest is missing")
-    require(f"sha256:{sha256_tree(foundation)}" == config["foundation_digest"], "foundation digest mismatch")
+    foundation_digest = rank_zero_value(
+        torch,
+        world_size,
+        rank,
+        local_rank,
+        lambda: f"sha256:{sha256_tree(foundation)}",
+    )
+    require(foundation_digest == config["foundation_digest"], "foundation digest mismatch")
     require(
         f"sha256:{sha256_file(dataset_manifest)}" == config["dataset_manifest_digest"],
         "dataset manifest digest mismatch",
     )
 
     parent_path = Path(config["parent_adapter_path"]) if config.get("parent_adapter_path") else None
-    parent_before = sha256_tree(parent_path) if parent_path else None
+    parent_before = rank_zero_value(
+        torch,
+        world_size,
+        rank,
+        local_rank,
+        lambda: sha256_tree(parent_path) if parent_path else None,
+    )
     if parent_path:
         require(f"sha256:{parent_before}" == config["parent_adapter_digest"], "parent adapter digest mismatch")
 
@@ -321,7 +350,16 @@ def train(config_path: Path) -> None:
         tokenizer_output = output / "tokenizer"
         model.save_pretrained(adapter_output, safe_serialization=True)
         tokenizer.save_pretrained(tokenizer_output)
-        parent_after = sha256_tree(parent_path) if parent_path else None
+    trainer.accelerator.wait_for_everyone()
+    parent_after = rank_zero_value(
+        torch,
+        world_size,
+        rank,
+        local_rank,
+        lambda: sha256_tree(parent_path) if parent_path else None,
+    )
+    if trainer.is_world_process_zero():
+        adapter_output = output / "adapter"
         require(parent_before == parent_after, "parent adapter changed during child training")
         adapter_digest = sha256_tree(adapter_output)
         write_json(
@@ -348,6 +386,9 @@ def train(config_path: Path) -> None:
                 "config_digest": f"sha256:{hashlib.sha256(canonical_json(config)).hexdigest()}",
             },
         )
+    trainer.accelerator.wait_for_everyone()
+    if torch.distributed.is_initialized():
+        torch.distributed.destroy_process_group()
 
 
 def main() -> None:

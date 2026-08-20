@@ -1,17 +1,18 @@
 # SDXL A/B CUDA backend
 
 This backend implements the physical SDXL path described by the Kubernetes
-workflow plan. Release A trains a watercolor LoRA. Release B trains a separate
-detail LoRA while a verified, immutable A is active and frozen.
+workflow plan. Release A trains a watercolor LoRA. Release B can train either
+a compatible detail LoRA or an Impressionist progression LoRA while a
+verified, immutable A is active and frozen.
 
 For B, the launcher creates an ephemeral foundation by loading A at the
 configured scale, fusing it into an in-memory copy of SDXL, and saving that
 copy under the run output. The official, commit-pinned Diffusers trainer then
-optimizes only the new B-detail LoRA against that frozen composed foundation.
-The accepted B serving identity remains:
+optimizes only the new B LoRA against that frozen composed foundation. The
+accepted Impressionist B serving identity is:
 
 ```text
-original SDXL foundation + immutable A-watercolor + immutable B-detail
+original SDXL foundation + immutable A-watercolor + immutable B-impressionism
 ```
 
 The ephemeral fused foundation is training implementation state, not a new
@@ -53,9 +54,22 @@ python kubernetes-CUDA/image/prepare_dataset.py \
   --output /workspace/datasets/release-a-imagefolder
 ```
 
-For B, use `--stages B-detail,A-replay`. Resolve replay weighting in the
+For Impressionist B, use `--stages B-impressionism,A-replay`. The legacy detail
+path remains available as `B-detail,A-replay`. Resolve replay weighting in the
 manifest's bounded `sampling_weight` before preparation. Every prepared copy
 retains its source and license evidence.
+
+For a deterministic demonstration corpus:
+
+```bash
+python kubernetes-CUDA/image/generate_demo_dataset.py \
+  --output /workspace/datasets/watercolor-impressionism \
+  --a-count 96 --b-count 96 --replay-count 24 \
+  --b-style impressionism --seed 260821
+```
+
+This procedural corpus is useful for workflow validation only. A production
+release requires a curated, licensed dataset and independent quality review.
 
 ## Render training and generation Jobs
 

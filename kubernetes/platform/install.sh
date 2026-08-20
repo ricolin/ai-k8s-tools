@@ -42,6 +42,18 @@ fi
 ${kubectl} version -o json >"${evidence_dir}/kubernetes-version.json"
 ${kustomize} version >"${evidence_dir}/kustomize-version.txt"
 
+if [[ ${SINGLE_NODE_CONTROL_PLANE:-false} == true && \
+      ${ALLOW_CONTROL_PLANE_SCHEDULING:-false} == true ]]; then
+  [[ $(${kubectl} get nodes -o name | wc -l) -eq 1 ]] || {
+    echo "control-plane untaint is restricted to a one-node cluster" >&2
+    exit 1
+  }
+  ${kubectl} get nodes -o yaml >"${evidence_dir}/nodes-before-scheduling-change.yaml"
+  ${kubectl} taint nodes --all node-role.kubernetes.io/control-plane- || true
+  ${kubectl} taint nodes --all node-role.kubernetes.io/master- || true
+  ${kubectl} get nodes -o yaml >"${evidence_dir}/nodes-after-scheduling-change.yaml"
+fi
+
 source_dir=${source_root}/kubeflow-community-${KUBEFLOW_DISTRIBUTION_COMMIT}
 if [[ ! -d ${source_dir}/.git ]]; then
   git clone --filter=blob:none --no-checkout https://github.com/kubeflow/community-distribution.git "${source_dir}"
@@ -87,6 +99,15 @@ ${kustomize} build common/cert-manager/overlays/kubeflow |
   ${kubectl} apply --server-side --force-conflicts -f -
 ${kubectl} wait -n cert-manager --for=condition=Ready pod \
   -l app.kubernetes.io/instance=cert-manager --timeout=300s
+
+${kustomize} build applications/katib/upstream/installs/katib-cert-manager |
+  ${kubectl} apply --server-side --force-conflicts -f -
+${kubectl} wait --for=condition=Established crd/experiments.kubeflow.org --timeout=120s
+${kubectl} wait --for=condition=Established crd/trials.kubeflow.org --timeout=120s
+for deployment in katib-controller katib-db-manager katib-mysql katib-ui; do
+  ${kubectl} wait -n kubeflow --for=condition=Available \
+    "deployment/${deployment}" --timeout=600s
+done
 
 for attempt in 1 2 3; do
   if ${kustomize} build applications/kserve/kserve |

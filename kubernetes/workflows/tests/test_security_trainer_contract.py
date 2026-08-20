@@ -14,6 +14,18 @@ trainer = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = trainer
 SPEC.loader.exec_module(trainer)
 
+GENERATOR_PATH = Path(__file__).parents[3] / "kubernetes-CUDA/security/generate_demo_dataset.py"
+GENERATOR_SPEC = importlib.util.spec_from_file_location("security_demo_dataset", GENERATOR_PATH)
+assert GENERATOR_SPEC is not None and GENERATOR_SPEC.loader is not None
+generator = importlib.util.module_from_spec(GENERATOR_SPEC)
+GENERATOR_SPEC.loader.exec_module(generator)
+
+EVALUATOR_PATH = Path(__file__).parents[3] / "kubernetes-CUDA/security/evaluate_adviser.py"
+EVALUATOR_SPEC = importlib.util.spec_from_file_location("security_evaluator", EVALUATOR_PATH)
+assert EVALUATOR_SPEC is not None and EVALUATOR_SPEC.loader is not None
+evaluator = importlib.util.module_from_spec(EVALUATOR_SPEC)
+EVALUATOR_SPEC.loader.exec_module(evaluator)
+
 
 def digest(character: str) -> str:
     return "sha256:" + (character * 64)
@@ -106,3 +118,45 @@ def test_effective_batch_contract_is_explicit(tmp_path: Path) -> None:
         * training["gradient_accumulation_steps"]
     )
     assert effective == 8
+
+
+def test_demo_dataset_is_deterministic_and_contract_valid(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    counts = {"A": 20, "B": 40, "C": 60}
+    first_manifest = generator.generate(first, counts)
+    second_manifest = generator.generate(second, counts)
+    assert first_manifest == second_manifest
+    assert (first / "records.jsonl").read_bytes() == (second / "records.jsonl").read_bytes()
+    assert first_manifest["stage_counts"] == counts
+    assert set(first_manifest["split_counts"]) == {"adversarial", "hidden", "train", "validation"}
+
+
+def test_rank_zero_value_does_not_require_distributed_for_one_rank() -> None:
+    class Torch:
+        pass
+
+    assert trainer.rank_zero_value(Torch(), 1, 0, 0, lambda: "observed") == "observed"
+
+
+def test_evaluator_requires_exact_foundation_a_b_c_order(tmp_path: Path) -> None:
+    config_path = tmp_path / "comparison.json"
+    config_path.write_text(
+        __import__("json").dumps(
+            {
+                "schema_version": "1.0.0",
+                "foundation_path": "/workspace/foundation",
+                "foundation_digest": digest("a"),
+                "prompts_path": "/workspace/prompts.json",
+                "output_dir": "/workspace/output",
+                "max_new_tokens": 64,
+                "stages": [
+                    {"name": "foundation", "adapter_path": None, "adapter_digest": None},
+                    {"name": "A", "adapter_path": "/workspace/a", "adapter_digest": digest("b")},
+                    {"name": "B", "adapter_path": "/workspace/b", "adapter_digest": digest("c")},
+                    {"name": "C", "adapter_path": "/workspace/c", "adapter_digest": digest("d")},
+                ],
+            }
+        )
+    )
+    assert [item["name"] for item in evaluator.load_config(config_path)["stages"]] == ["foundation", "A", "B", "C"]

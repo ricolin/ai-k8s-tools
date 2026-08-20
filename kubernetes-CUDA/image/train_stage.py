@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,7 @@ def digest_valid(value: str) -> bool:
 
 def validate_config(config: dict[str, Any]) -> dict[str, Any]:
     require(config.get("schema_version") == "1.0.0", "unsupported image training config")
-    require(config.get("stage") in {"A", "B-detail"}, "stage must be A or B-detail")
+    require(config.get("stage") in {"A", "B-detail", "B-impressionism"}, "stage must be A, B-detail, or B-impressionism")
     for field in ("base_path", "prepared_dataset_path", "output_dir"):
         require(isinstance(config.get(field), str) and config[field].startswith("/"), f"{field} must be absolute")
     for field in ("base_digest", "prepared_dataset_digest"):
@@ -52,8 +53,8 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
     if config["stage"] == "A":
         require(parent in {None, ""}, "Release A cannot have a parent")
     else:
-        require(isinstance(parent, str) and parent.startswith("/"), "B-detail parent path is required")
-        require(digest_valid(str(config.get("parent_adapter_digest", ""))), "B-detail parent digest is required")
+        require(isinstance(parent, str) and parent.startswith("/"), "Release B parent path is required")
+        require(digest_valid(str(config.get("parent_adapter_digest", ""))), "Release B parent digest is required")
     training = config.get("training", {})
     for field in ("gpu_count", "max_steps", "checkpoint_steps", "resolution", "rank", "batch_size", "gradient_accumulation"):
         require(int(training.get(field, 0)) > 0, f"training.{field} must be positive")
@@ -88,6 +89,7 @@ def main() -> None:
     parser.add_argument("--config", required=True, type=Path)
     args = parser.parse_args()
     config = validate_config(json.loads(args.config.read_text()))
+    training = config["training"]
     os.environ.update(
         HF_HUB_OFFLINE="1",
         TRANSFORMERS_OFFLINE="1",
@@ -104,14 +106,14 @@ def main() -> None:
     output.mkdir(parents=True)
     training_base = base
     parent_before = None
-    if config["stage"] == "B-detail":
+    if config["stage"] in {"B-detail", "B-impressionism"}:
         parent = Path(config["parent_adapter_path"])
         parent_before = sha256_tree(parent)
         require(f"sha256:{parent_before}" == config["parent_adapter_digest"], "parent adapter digest mismatch")
         training_base = output / "ephemeral-composed-foundation"
         subprocess.run(
             [
-                "python",
+                sys.executable,
                 "/opt/ai-build-tools-image/compose_parent.py",
                 "--base",
                 str(base),
@@ -132,8 +134,9 @@ def main() -> None:
     trainer_output = output / "adapter"
     warmup_steps = max(1, round(int(training["max_steps"]) * float(training.get("warmup_ratio", 0.05))))
     command = [
-        "accelerate",
-        "launch",
+        sys.executable,
+        "-m",
+        "accelerate.commands.launch",
         "--num_machines",
         "1",
         "--num_processes",
@@ -186,7 +189,7 @@ def main() -> None:
             str(config["seed"]),
             "--gradient_checkpointing",
             "--report_to",
-            "none",
+            "tensorboard",
             "--dataloader_num_workers",
             str(training.get("dataloader_workers", 2)),
         ]

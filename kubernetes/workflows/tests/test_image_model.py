@@ -72,6 +72,42 @@ def test_image_jobs_have_explicit_gpu_scope_and_offline_inputs() -> None:
     assert generate_container["resources"]["limits"]["nvidia.com/gpu"] == 1
     assert training["spec"]["template"]["spec"]["automountServiceAccountToken"] is False
     assert {item["name"]: item["value"] for item in train_container["env"]}["HF_HUB_OFFLINE"] == "1"
+    assert {item["name"]: item for item in training["spec"]["template"]["spec"]["volumes"]}["dshm"] == {
+        "name": "dshm",
+        "emptyDir": {"medium": "Memory", "sizeLimit": "32Gi"},
+    }
+    assert {item["mountPath"] for item in train_container["volumeMounts"]} == {"/workspace", "/dev/shm"}
+
+
+def test_node_local_image_requires_never_and_records_runtime_id() -> None:
+    job = render_image_job(
+        "image-a",
+        "ai-workflows",
+        "ai-k8s-tools.local/image-workflow:260820-v3",
+        "workspace",
+        "/workspace/config/A.json",
+        8,
+        "train",
+        "accelerator",
+        "h200",
+        "Never",
+        digest("f"),
+    )
+    assert job["spec"]["template"]["spec"]["containers"][0]["imagePullPolicy"] == "Never"
+    assert job["metadata"]["annotations"]["ai-build-tools.ricolin.dev/node-local-image-id"] == digest("f")
+    with pytest.raises(ContractError, match="node_local_image_id"):
+        render_image_job(
+            "image-a",
+            "ai-workflows",
+            "ai-k8s-tools.local/image-workflow:260820-v3",
+            "workspace",
+            "/workspace/config/A.json",
+            8,
+            "train",
+            "accelerator",
+            "h200",
+            "Never",
+        )
 
 
 def test_image_release_records_ordered_composition() -> None:
@@ -89,13 +125,27 @@ def test_image_release_records_ordered_composition() -> None:
     assert [adapter["name"] for adapter in release["adapters"]] == ["watercolor", "detail"]
 
 
+def test_impressionist_release_records_watercolor_parent_first() -> None:
+    release = create_release_manifest(
+        "release-b-watercolor-impressionism",
+        digest("a"),
+        [
+            {"name": "watercolor", "digest": digest("b"), "scale": 1.0},
+            {"name": "impressionism", "digest": digest("c"), "scale": 0.8},
+        ],
+        digest("d"),
+        digest("e"),
+        "AI_BLIND_REVIEWED",
+    )
+    assert [adapter["name"] for adapter in release["adapters"]] == ["watercolor", "impressionism"]
+
+
 TRAIN_STAGE = Path(__file__).parents[3] / "kubernetes-CUDA/image/train_stage.py"
 SPEC = importlib.util.spec_from_file_location("image_train_stage", TRAIN_STAGE)
 assert SPEC is not None and SPEC.loader is not None
 image_train = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = image_train
 SPEC.loader.exec_module(image_train)
-
 
 def image_training_config(tmp_path: Path, stage: str) -> dict:
     base = tmp_path / "base"
@@ -126,9 +176,9 @@ def image_training_config(tmp_path: Path, stage: str) -> dict:
             "parent_scale": 1.0,
         },
     }
-    if stage == "B-detail":
+    if stage in {"B-detail", "B-impressionism"}:
         parent = tmp_path / "parent"
-        parent.mkdir()
+        parent.mkdir(exist_ok=True)
         value["parent_adapter_path"] = str(parent)
         value["parent_adapter_digest"] = digest("c")
     return value
@@ -140,3 +190,63 @@ def test_b_detail_requires_immutable_parent(tmp_path: Path) -> None:
     value["parent_adapter_path"] = "/unexpected"
     with pytest.raises(SystemExit, match="cannot have a parent"):
         image_train.validate_config(value)
+
+    impressionism = image_training_config(tmp_path, "B-impressionism")
+    assert image_train.validate_config(impressionism)["stage"] == "B-impressionism"
+
+
+def test_a_stage_launcher_writes_candidate_result(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config = image_training_config(tmp_path, "A")
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config))
+
+    monkeypatch.setattr(image_train, "sha256_tree", lambda _path: "a" * 64)
+    monkeypatch.setattr(image_train, "verify_prepared_dataset", lambda _path, _digest: {"status": "PASS"})
+
+    def fake_run(command: list[str], check: bool) -> None:
+        assert check is True
+        assert command[:3] == [sys.executable, "-m", "accelerate.commands.launch"]
+        assert command[command.index("--report_to") + 1] == "tensorboard"
+        trainer_output = Path(command[command.index("--output_dir") + 1])
+        trainer_output.mkdir(parents=True)
+        (trainer_output / "pytorch_lora_weights.safetensors").write_bytes(b"adapter")
+
+    monkeypatch.setattr(image_train.subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", ["train_stage.py", "--config", str(config_path)])
+    image_train.main()
+    result = json.loads((tmp_path / "output" / "training-result.json").read_text())
+    assert result["status"] == "CANDIDATE"
+    assert result["stage"] == "A"
+    assert result["gpu_count"] == 8
+
+
+def test_demo_dataset_is_deterministic_and_manifest_ready(tmp_path: Path) -> None:
+    pytest.importorskip("PIL")
+    demo_dataset = Path(__file__).parents[3] / "kubernetes-CUDA/image/generate_demo_dataset.py"
+    demo_spec = importlib.util.spec_from_file_location("image_demo_dataset", demo_dataset)
+    assert demo_spec is not None and demo_spec.loader is not None
+    image_demo = importlib.util.module_from_spec(demo_spec)
+    sys.modules[demo_spec.name] = image_demo
+    demo_spec.loader.exec_module(image_demo)
+    first = image_demo.write_stage(tmp_path / "first", "A", 1, 260820)[0]
+    second = image_demo.write_stage(tmp_path / "second", "A", 1, 260820)[0]
+    assert first["sha256"] == second["sha256"]
+    assert first["license"] == "CC0-1.0"
+    assert first["permission_confirmed"] is True
+    assert first["caption"].startswith("abt_watercolor,")
+
+
+def test_demo_impressionism_is_distinct_and_deterministic(tmp_path: Path) -> None:
+    pytest.importorskip("PIL")
+    demo_dataset = Path(__file__).parents[3] / "kubernetes-CUDA/image/generate_demo_dataset.py"
+    demo_spec = importlib.util.spec_from_file_location("image_demo_dataset_impressionism", demo_dataset)
+    assert demo_spec is not None and demo_spec.loader is not None
+    image_demo = importlib.util.module_from_spec(demo_spec)
+    sys.modules[demo_spec.name] = image_demo
+    demo_spec.loader.exec_module(image_demo)
+    watercolor = image_demo.write_stage(tmp_path / "watercolor", "A", 1, 260820)[0]
+    first = image_demo.write_stage(tmp_path / "first", "B-impressionism", 1, 260820)[0]
+    second = image_demo.write_stage(tmp_path / "second", "B-impressionism", 1, 260820)[0]
+    assert first["sha256"] == second["sha256"]
+    assert first["sha256"] != watercolor["sha256"]
+    assert "abt_impressionism" in first["caption"]

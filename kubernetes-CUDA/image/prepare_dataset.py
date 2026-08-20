@@ -31,7 +31,7 @@ def main() -> None:
     args = parser.parse_args()
 
     stages = {value.strip() for value in args.stages.split(",") if value.strip()}
-    if not stages or not stages <= {"A", "B-detail", "A-replay", "C-watercolor", "C-complex-detail", "C-retention"}:
+    if not stages or not stages <= {"A", "B-detail", "B-impressionism", "A-replay", "C-watercolor", "C-complex-detail", "C-retention"}:
         raise SystemExit("invalid image training stages")
     source_root = args.dataset_root.resolve()
     output = args.output.resolve()
