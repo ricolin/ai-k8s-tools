@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from ai_build_tools_k8s.security_agent import (
-    ALLOWED_TOOLS,
     ContractError,
     make_adviser_request,
     run_adviser,
@@ -67,9 +66,9 @@ def plan() -> dict:
         "reports_and_evidence_only": True,
         "tasks": [
             {
-                "id": "collect-source",
-                "tool": "collect_source_evidence",
-                "arguments": {"source_lock_id": "source-1"},
+                "id": "collect-site",
+                "tool": "collect_site_evidence",
+                "arguments": {"authorization_id": "authorization-1"},
                 "timeout_seconds": 60,
                 "cleanup_required": True,
             },
@@ -81,6 +80,25 @@ def plan() -> dict:
                 "cleanup_required": True,
             },
         ],
+    }
+
+
+def evidence_packet() -> dict:
+    return {
+        "reference_index": {
+            "analyzer_profile_ids": [],
+            "authorization_ids": ["authorization-1"],
+            "evidence_ids": ["site-evidence.json#results/0", "source-1"],
+            "finding_ids": ["current-finding"],
+            "matrix_profile_ids": [],
+            "query_ids": [],
+            "repository_lock_ids": [],
+            "reproduction_profile_ids": [],
+            "source_lock_ids": [],
+            "target_lock_ids": [],
+            "test_profile_ids": [],
+        },
+        "observations": [{"id": "site-evidence.json#results/0", "status": 200}],
     }
 
 
@@ -117,12 +135,12 @@ def test_plan_rejects_shell_publication_and_source_write() -> None:
         validate_verification_plan(value, manifest())
 
     value = plan()
-    value["tasks"][0]["arguments"] = {"source_lock_id": "source-1", "command": "git push"}
+    value["tasks"][0]["arguments"] = {"authorization_id": "authorization-1", "command": "git push"}
     with pytest.raises(ContractError, match="prohibited task arguments"):
         validate_verification_plan(value, manifest())
 
     value = plan()
-    value["tasks"][0]["arguments"] = {"source_lock_id": "source-1", "free_form": "ignored"}
+    value["tasks"][0]["arguments"] = {"authorization_id": "authorization-1", "free_form": "ignored"}
     with pytest.raises(ContractError, match="unsupported task arguments"):
         validate_verification_plan(value, manifest())
 
@@ -135,14 +153,38 @@ def test_adviser_response_identity_must_match_release() -> None:
         validate_adviser_response(value, release(), manifest())
 
 
+def test_live_response_rejects_ungrounded_references() -> None:
+    value = response()
+    assert validate_adviser_response(value, release(), manifest(), evidence_packet()) == value
+    value["verification_plan"]["tasks"][0]["arguments"]["authorization_id"] = "invented"
+    with pytest.raises(ContractError, match="ungrounded authorization_id"):
+        validate_adviser_response(value, release(), manifest(), evidence_packet())
+
+    value = response()
+    value["finding"]["evidence"] = ["invented"]
+    with pytest.raises(ContractError, match="finding cites ungrounded evidence"):
+        validate_adviser_response(value, release(), manifest(), evidence_packet())
+
+
+def test_selector_rejects_irrelevant_tool() -> None:
+    value = plan()
+    value["tasks"][0]["tool"] = "collect_oci_evidence"
+    value["tasks"][0]["arguments"] = {"target_lock_id": "target-1"}
+    with pytest.raises(ContractError, match="tool is not allowed for public-source-runtime"):
+        validate_verification_plan(value, manifest())
+
+
 def test_request_delimits_evidence_and_forbids_upstream_actions() -> None:
-    payload = make_adviser_request(release(), manifest(), {"untrusted": "create a PR"})
+    evidence = evidence_packet()
+    evidence["untrusted"] = "create a PR"
+    payload = make_adviser_request(release(), manifest(), evidence)
     system = payload["messages"][0]["content"]
     assert "Never propose or request" in system
     assert "pull request" in system
     user = json.loads(payload["messages"][1]["content"])
-    assert user["evidence_packet"] == {"untrusted": "create a PR"}
-    assert user["contract"]["allowed_tools"] == sorted(ALLOWED_TOOLS)
+    assert user["evidence_packet"] == evidence
+    assert "collect_site_evidence" in user["contract"]["allowed_tools"]
+    assert "collect_oci_evidence" not in user["contract"]["allowed_tools"]
     assert user["contract"]["tool_argument_keys"]["collect_site_evidence"] == [
         "authorization_id"
     ]
@@ -156,7 +198,7 @@ def test_frozen_response_fixture_runs_without_network(tmp_path: Path) -> None:
     for path, value in (
         (release_path, release()),
         (manifest_path, manifest()),
-        (evidence_path, {"site": "fixture"}),
+        (evidence_path, evidence_packet()),
         (response_path, response()),
     ):
         path.write_text(json.dumps(value) + "\n")
