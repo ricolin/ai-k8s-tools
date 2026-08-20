@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-build-tools.example/schemas/finding-v1.json",
+  "title": "Analysis-only private finding",
+  "type": "object",
+  "required": [
+    "title",
+    "proof_state",
+    "research_classification",
+    "evidence",
+    "upstream_change_authorized",
+    "public_disclosure_authorized"
+  ],
+  "properties": {
+    "title": {"type": "string", "minLength": 1},
+    "proof_state": {
+      "enum": ["PROVEN", "SUPPORTED", "UNVERIFIED", "NOT_REPRODUCED", "BLOCKED_BY_POLICY"]
+    },
+    "research_classification": {
+      "enum": [
+        "KNOWN_FIXED",
+        "KNOWN_OPEN",
+        "DUPLICATE",
+        "DOWNSTREAM_CONFIG",
+        "IMAGE_BUILD",
+        "MCAPI_DRIVER",
+        "MAGNUM_SERVICE",
+        "UBUNTU_PACKAGING",
+        "KUBERNETES_COMPATIBILITY",
+        "UNKNOWN_MULTI_REPOSITORY",
+        "POTENTIALLY_NOVEL",
+        "INSUFFICIENT_EVIDENCE"
+      ]
+    },
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "upstream_change_authorized": {"const": false},
+    "public_disclosure_authorized": {"const": false}
+  }
+}

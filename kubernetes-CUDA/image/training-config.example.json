@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "stage": "A",
+  "base_path": "/workspace/models/sdxl-base-1.0",
+  "base_digest": "sha256:REPLACE_WITH_BASE_TREE_DIGEST",
+  "prepared_dataset_path": "/workspace/datasets/release-a-imagefolder",
+  "prepared_dataset_digest": "sha256:REPLACE_WITH_PREPARED_DATASET_JSON_DIGEST",
+  "parent_adapter_path": null,
+  "parent_adapter_digest": null,
+  "output_dir": "/workspace/runs/REPLACE_WITH_RUN_ID/A",
+  "fallback_prompt": "a watercolor painting with detailed architectural structure",
+  "seed": 260820,
+  "training": {
+    "gpu_count": 8,
+    "max_steps": 800,
+    "checkpoint_steps": 100,
+    "checkpoint_limit": 3,
+    "resolution": 1024,
+    "rank": 64,
+    "batch_size": 1,
+    "gradient_accumulation": 1,
+    "learning_rate": 0.0001,
+    "warmup_ratio": 0.05,
+    "parent_scale": 1.0,
+    "dataloader_workers": 2
+  }
+}

@@ -1,0 +1,40 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ai-build-tools-nvidia-smi
+  namespace: ${WORKLOAD_NAMESPACE}
+  labels:
+    app.kubernetes.io/name: ai-build-tools-cuda-validation
+    ai-build-tools.ricolin.dev/gate: cuda-smoke
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    ${NODE_SELECTOR_KEY}: ${NODE_SELECTOR_VALUE}
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+  containers:
+    - name: nvidia-smi
+      image: ${CUDA_SMOKE_IMAGE}
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -ceu
+        - |
+          nvidia-smi \
+            --query-gpu=uuid,name,driver_version,memory.total \
+            --format=csv,noheader
+          test "$(
+            nvidia-smi --query-gpu=uuid --format=csv,noheader | wc -l
+          )" -eq 1
+      env:
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: compute,utility
+      resources:
+        limits:
+          nvidia.com/gpu: "1"

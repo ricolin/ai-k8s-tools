@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "profile": "analysis-only-public-research",
+  "analysis_only": true,
+  "allow_source_write": false,
+  "allow_patch_output": false,
+  "allow_git_commit": false,
+  "allow_git_push": false,
+  "allow_issue_create": false,
+  "allow_pr_create": false,
+  "allow_issue_pr_artifacts": false,
+  "allow_upstream_comment": false,
+  "allow_external_live_scan": false,
+  "allow_public_disclosure": false,
+  "allow_real_host_root_shell": false,
+  "allow_credential_attack": false,
+  "allow_persistence": false,
+  "allow_destructive_action": false,
+  "allowed_outputs": [
+    "reports",
+    "evidence",
+    "safe-reproduction",
+    "remediation-recommendations",
+    "regression-test-recommendations"
+  ]
+}

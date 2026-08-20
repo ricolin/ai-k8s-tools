@@ -1,0 +1,60 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ai-build-tools-pytorch-cuda
+  namespace: ${WORKLOAD_NAMESPACE}
+  labels:
+    app.kubernetes.io/name: ai-build-tools-cuda-validation
+    ai-build-tools.ricolin.dev/gate: pytorch-cuda
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-build-tools-cuda-validation
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        ${NODE_SELECTOR_KEY}: ${NODE_SELECTOR_VALUE}
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: pytorch-cuda
+          image: ${PYTORCH_CUDA_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command:
+            - python3
+            - -c
+            - |
+              import json
+              import torch
+
+              assert torch.cuda.is_available(), "PyTorch CUDA is unavailable"
+              assert torch.cuda.device_count() == 1, torch.cuda.device_count()
+              left = torch.arange(
+                  16, device="cuda", dtype=torch.float32
+              ).reshape(4, 4)
+              right = torch.eye(4, device="cuda")
+              result = left @ right
+              torch.cuda.synchronize()
+              assert torch.equal(result, left)
+              properties = torch.cuda.get_device_properties(0)
+              print(json.dumps({
+                  "cuda_available": True,
+                  "cuda_version": torch.version.cuda,
+                  "device_count": torch.cuda.device_count(),
+                  "device_name": torch.cuda.get_device_name(0),
+                  "device_total_memory": properties.total_memory,
+                  "torch_version": torch.__version__,
+                  "tensor_sum": result.sum().item(),
+              }, sort_keys=True))
+          resources:
+            limits:
+              nvidia.com/gpu: "1"

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-build-tools.example/schemas/verification-plan-v1.json",
+  "title": "Analysis-only verification plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target_type",
+    "research_selector",
+    "analysis_only",
+    "reports_and_evidence_only",
+    "tasks"
+  ],
+  "properties": {
+    "target_type": {"const": "upstream-research"},
+    "research_selector": {
+      "enum": ["public-image", "public-source-repository", "public-source-runtime"]
+    },
+    "analysis_only": {"const": true},
+    "reports_and_evidence_only": {"const": true},
+    "tasks": {
+      "type": "array",
+      "maxItems": 40,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "tool", "arguments", "timeout_seconds", "cleanup_required"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "tool": {
+            "enum": [
+              "collect_source_evidence",
+              "collect_site_evidence",
+              "collect_oci_evidence",
+              "search_existing_upstream_issues",
+              "search_existing_security_advisories",
+              "run_static_source_analyzers",
+              "run_project_tests",
+              "run_local_reproduction",
+              "run_ubuntu_version_matrix",
+              "run_kubernetes_api_compatibility",
+              "classify_ownership",
+              "draft_private_finding",
+              "draft_remediation_recommendations",
+              "draft_regression_test_recommendations"
+            ]
+          },
+          "arguments": {"type": "object"},
+          "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 1800},
+          "cleanup_required": {"const": true}
+        }
+      }
+    }
+  }
+}
