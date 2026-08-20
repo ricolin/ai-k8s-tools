@@ -33,6 +33,8 @@ scripts/                Shared GPU runtime bootstrap helper
 Start with:
 
 - [Kubernetes workflow](docs/kubernetes-workflow.md)
+- [Grounded security-agent workflow](docs/security-agent-workflow.md)
+- [Troubleshooting](docs/troubleshooting.md)
 - [Kubernetes tools](kubernetes/README.md)
 - [CUDA and H200 validation](kubernetes-CUDA/README.md)
 - [SDXL CUDA backend](kubernetes-CUDA/image/README.md)
@@ -64,6 +66,12 @@ python3 -m py_compile \
 The final verifier proves local contracts and a synthetic fixture only. It
 does not prove CUDA, H200 performance, model training quality, KServe on a
 live cluster, or production readiness.
+
+For each command's acceptance condition and failure boundary, follow the
+[security-agent workflow](docs/security-agent-workflow.md). Scanner execution
+and KServe lifecycle are operator integrations; this repository validates the
+evidence and release contracts and does not silently grant authority to scan a
+target.
 
 ## Repository split
 

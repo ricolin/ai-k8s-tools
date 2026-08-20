@@ -1,0 +1,78 @@
+# Troubleshooting
+
+## Triage Rule
+
+Capture evidence before changing state. Retry with a new output directory or
+run ID; never overwrite an accepted or failed run. First classify the failure
+as cluster, GPU, model identity, KServe, evidence contract, target
+authorization, external scanner, or retention.
+
+## Quick Matrix
+
+| Symptom | Check | Expected | Corrective action |
+|---|---|---|---|
+| Wrapper shows only research commands | `ai-workflow --help` | Wrapper command groups | Use a checkout containing the wrapper-help fix; use `agent`, `model`, `image`, or `research` explicitly. |
+| Tests import stale code | `pwd`; `uv run --project kubernetes/workflows python -c 'import ai_build_tools_k8s; print(ai_build_tools_k8s.__file__)'` | Path under current checkout | Remove an activated unrelated virtualenv and rerun `uv sync --frozen`. |
+| GPU Job is Pending | `kubectl describe pod`; inspect allocatable GPU | Requested GPU count is allocatable and selector matches | Correct selector/taint/runtime; do not lower the request and still claim the original gate. |
+| CUDA unavailable | Pod logs and `nvidia.com/gpu` allocation | CUDA operation succeeds inside the allocated Pod | Repair driver, toolkit, containerd runtime, or device plugin in a maintenance window. |
+| KServe never becomes Ready | `kubectl describe isvc`; predictor events/logs | Predictor Ready and digest-verification init succeeds | Check PVC paths, image pull, memory/GPU request, probes, and exact model digests. |
+| Port-forward disconnects | Check predictor Pod UID | Forward targets current Pod/Service | Restart the forward after a rollout; a Pod replacement invalidates an old session. |
+| Adapter/foundation mismatch | `/health` and mounted verification JSON | Digests exactly equal release manifest | Stop. Mount the accepted immutable artifacts; never edit the release manifest to match unexpected bytes. |
+| `reference_index fields are incomplete` | `jq '.reference_index | keys'` | All eleven categories exist | Add missing categories as arrays, even when empty. |
+| `ungrounded ...` | Compare task/finding IDs to `reference_index` | Every model-created reference is caller supplied | Reject and retain the response. Do not add invented IDs merely to pass validation. |
+| Tool not allowed for selector | Inspect manifest selector and task tool | Tool belongs to selector allowlist | Split the analysis into separate manifests; do not broaden authority. |
+| Prohibited argument such as `command` | Inspect task arguments | Only typed argument keys | Reject the response. Arbitrary shell execution is intentionally unsupported. |
+| Collector reaches another origin | Collector request log | Off-origin count is zero | Stop the target, preserve logs, correct runtime authorization and NetworkPolicy, then use a new run. |
+| Scanner cannot update database | Container network and cache logs | Frozen scanner/database identity recorded | Stage the database through an approved path or grant scanner-only egress; do not broaden workload egress. |
+| ZAP waits on add-on updates | ZAP logs | Scan starts with frozen bundled policy | Use a digest-pinned image and silent/offline-compatible invocation. Keep bundled policy files visible. |
+| ZAP fails read-only root | Pod security and writable paths | Non-root process has only required writable mounts | Mount reviewed writable cache/output paths; keep root filesystem read-only where supported. |
+| Trivy sees no network from Docker | Host forwarding and invocation | Scanner alone reaches registry/database | Use an approved scanner-specific network path. Do not change cluster-wide networking for the test. |
+| Scanner reports many CVEs/configs | SBOM and runtime evidence | Finding remains unverified until reachability is proven | Triage package presence, fixed versions, runtime use, and ownership separately. |
+| Evidence checksum fails | `sha256sum -c SHA256SUMS` | Every retained object reports `OK` | Treat the bundle as modified; recover from the authoritative copy or create a new manifest with an explicit reason. |
+
+## KServe Evidence Bundle
+
+Collect these before changing a failed predictor:
+
+```bash
+kubectl get inferenceservice -A -o yaml >inferenceservices.yaml
+kubectl get pods -A -o wide >pods.txt
+kubectl get events -A --sort-by=.metadata.creationTimestamp >events.txt
+kubectl logs -n MODEL_NAMESPACE deployment/MODEL_NAME-predictor \
+  --all-containers >predictor.log 2>&1 || true
+```
+
+For restart testing, record the old Pod name/UID, restart or replace the
+predictor through the approved controller, wait for readiness, record the new
+UID, and repeat `/health` and `/v1/models`. A changed UID plus matching digests
+is the minimum restart proof.
+
+## Grounding Negative Control
+
+Run one deliberately invalid response after every policy change. It must exit
+nonzero for an invented evidence ID, prohibited argument, or selector-mismatched
+tool while the accepted KServe endpoint remains healthy. If the negative test
+passes, stop the workflow and treat the broker change as unsafe.
+
+## External Scanner Interpretation
+
+Treat scanner severity as triage priority, not exploit proof. Record:
+
+- immutable target and scanner image digests;
+- scanner/database version or snapshot;
+- architecture-specific target manifest;
+- complete raw report and summary derivation;
+- whether the affected component is present, invoked, reachable, and owned by
+  the image or an upstream dependency; and
+- whether a fixed version exists.
+
+Do not claim a novel or upstream vulnerability from package presence alone.
+
+## Cleanup And Escalation
+
+Scale a deliberately vulnerable fixture to zero after evidence collection.
+Retain completed Jobs and definitions only when the environment policy allows
+it. Escalate with the immutable run ID, exact source/model/image digests,
+failed command, exit code, relevant logs, observed versus expected result, and
+checksum status. Never include kubeconfigs, bearer tokens, registry passwords,
+or private model credentials in a portable report.

@@ -43,3 +43,7 @@ See [the full workflow and operations guide](../docs/kubernetes-workflow.md).
 Physical CUDA integration remains a separate gated workstream; its detailed
 plan and reusable H200 validation templates are in
 [kubernetes-CUDA](../kubernetes-CUDA/README.md).
+
+The released-adviser and reports-only agent path is documented in
+[the grounded security-agent guide](../docs/security-agent-workflow.md), with
+failure recovery in [troubleshooting](../docs/troubleshooting.md).

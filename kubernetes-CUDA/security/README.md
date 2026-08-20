@@ -145,3 +145,8 @@ The result is still a candidate until `ai-security-agent run` validates it
 against the accepted release, analysis manifest, and synthetic evidence. A
 model response that swaps enum fields, adds an argument, or changes identity
 must be rejected rather than repaired silently.
+
+Continue with the provider-neutral
+[grounded security-agent workflow](../../docs/security-agent-workflow.md).
+For digest, KServe, grounding, and evidence failures, use the
+[troubleshooting guide](../../docs/troubleshooting.md).
