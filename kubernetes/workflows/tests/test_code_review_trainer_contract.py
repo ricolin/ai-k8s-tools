@@ -103,6 +103,56 @@ def test_quality_gate_rejects_non_array_review_fields_and_unterminated_patch() -
     assert "proposed fix must end with a newline" in errors
 
 
+def test_quality_gate_rejects_mismatched_diff_headers() -> None:
+    generated = generator.record("C", 0)
+    answer = json.loads(generated["messages"][2]["content"])
+    answer["candidate_fix"]["unified_diff"] += "+++ b/src/other.py\n"
+
+    _, errors = quality_gate.validate_response_text(json.dumps(answer))
+
+    assert "proposed fix file headers do not match diff sections" in errors
+
+
+def comparison_records() -> list[dict[str, str]]:
+    records = []
+    for stage in quality_gate.STAGES:
+        for prompt_id in quality_gate.PROMPTS:
+            records.append(
+                {
+                    "schema_version": "1.0.0",
+                    "stage": stage,
+                    "prompt_id": prompt_id,
+                    "expected_reviewer_identity": "sha256:" + ("1" * 64),
+                    "foundation_digest": "sha256:" + ("2" * 64),
+                    "prompt_digest": "sha256:" + ("3" * 64),
+                    "response": "{}",
+                }
+            )
+    return records
+
+
+def write_comparison_records(tmp_path: Path, records: list[dict[str, str]]) -> Path:
+    path = tmp_path / "responses.jsonl"
+    path.write_text("".join(json.dumps(item) + "\n" for item in records))
+    return path
+
+
+def test_quality_gate_rejects_duplicate_prompt_row(tmp_path: Path) -> None:
+    records = comparison_records()
+    records.append(dict(records[0]))
+
+    with pytest.raises(ValueError, match="exactly one response per stage"):
+        quality_gate.evaluate(write_comparison_records(tmp_path, records))
+
+
+def test_quality_gate_rejects_mixed_prompt_revisions(tmp_path: Path) -> None:
+    records = comparison_records()
+    records[-1]["prompt_digest"] = "sha256:" + ("4" * 64)
+
+    with pytest.raises(ValueError, match="prompt digest differs across stages"):
+        quality_gate.evaluate(write_comparison_records(tmp_path, records))
+
+
 def test_quality_gate_canonicalizes_unescaped_string_newlines() -> None:
     generated = generator.record("C", 0)
     raw = generated["messages"][2]["content"].replace("\\n", "\n", 1)

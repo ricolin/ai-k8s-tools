@@ -16,6 +16,7 @@ PROMPT_REFERENCES = {
     "pr-agent-fix": ("repo-agent", "pr-agent", "python-unit", "agent-diff"),
 }
 PROMPTS = set(PROMPT_REFERENCES)
+STAGES = ("foundation", "A", "B", "C")
 REVIEW_FIELDS = {"schema_version", "summary", "verdict", "findings", "tests", "unknowns"}
 FINDING_FIELDS = {"id", "severity", "category", "path", "line", "evidence", "impact", "recommendation", "test"}
 FIX_FIELDS = {"status", "patch_id", "unified_diff", "rationale", "expected_tests"}
@@ -79,10 +80,16 @@ def validate_response_text(raw: str) -> tuple[dict[str, Any] | None, list[str]]:
         patch = fix.get("unified_diff")
         if not isinstance(patch, str) or not re.search(r"^diff --git a/.+ b/.+$", patch, flags=re.MULTILINE):
             errors.append("proposed fix is not a unified diff")
-        elif any(part in patch for part in ("../", "a/.git/", "b/.git/", "GIT binary patch", "Binary files ")):
-            errors.append("proposed fix contains an unsafe path or binary patch")
-        elif not patch.endswith("\n"):
-            errors.append("proposed fix must end with a newline")
+        else:
+            sections = len(re.findall(r"^diff --git a/.+ b/.+$", patch, flags=re.MULTILINE))
+            old_headers = len(re.findall(r"^--- (?:a/.+|/dev/null)$", patch, flags=re.MULTILINE))
+            new_headers = len(re.findall(r"^\+\+\+ (?:b/.+|/dev/null)$", patch, flags=re.MULTILINE))
+            if sections != old_headers or sections != new_headers:
+                errors.append("proposed fix file headers do not match diff sections")
+            if any(part in patch for part in ("../", "a/.git/", "b/.git/", "GIT binary patch", "Binary files ")):
+                errors.append("proposed fix contains an unsafe path or binary patch")
+            if not patch.endswith("\n"):
+                errors.append("proposed fix must end with a newline")
     elif isinstance(fix, dict) and set(fix) == FIX_FIELDS and fix.get("status") not in {"NOT_NEEDED", "BLOCKED"}:
         errors.append("candidate fix status is invalid")
     elif isinstance(fix, dict) and set(fix) == FIX_FIELDS and (
@@ -171,10 +178,30 @@ def score(record: dict[str, Any]) -> dict[str, Any]:
 
 def evaluate(path: Path) -> dict[str, Any]:
     records = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    if {record.get("stage") for record in records} != set(STAGES):
+        raise ValueError("responses do not contain the exact stage set")
+    foundation_digests = {record.get("foundation_digest") for record in records}
+    if len(foundation_digests) != 1 or not re.fullmatch(
+        r"sha256:[0-9a-f]{64}", str(next(iter(foundation_digests)))
+    ):
+        raise ValueError("foundation digest differs across responses")
+    for prompt_id in sorted(PROMPTS):
+        selected = [record for record in records if record.get("prompt_id") == prompt_id]
+        if len(selected) != len(STAGES):
+            raise ValueError(f"prompt {prompt_id} does not contain exactly one response per stage")
+        prompt_digests = {record.get("prompt_digest") for record in selected}
+        if len(prompt_digests) != 1 or not re.fullmatch(
+            r"sha256:[0-9a-f]{64}", str(next(iter(prompt_digests)))
+        ):
+            raise ValueError(f"prompt digest differs across stages: {prompt_id}")
+        reviewer_identities = {record.get("expected_reviewer_identity") for record in selected}
+        if len(reviewer_identities) != 1:
+            raise ValueError(f"reviewer identity differs across stages: {prompt_id}")
     stages: dict[str, Any] = {}
-    for stage in ("foundation", "A", "B", "C"):
+    for stage in STAGES:
         selected = [record for record in records if record.get("stage") == stage]
-        if {record.get("prompt_id") for record in selected} != PROMPTS:
+        prompt_ids = [record.get("prompt_id") for record in selected]
+        if len(prompt_ids) != len(PROMPTS) or set(prompt_ids) != PROMPTS:
             raise ValueError(f"stage {stage} does not contain the exact prompt set")
         results = [score(record) for record in selected]
         stages[stage] = {
