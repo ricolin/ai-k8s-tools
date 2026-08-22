@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from ai_build_tools_k8s.code_review_agent import validate_candidate_fix, validate_response
+from ai_build_tools_k8s.code_review_agent import make_request, validate_candidate_fix, validate_response
 from ai_build_tools_k8s.code_review_model import ContractError
 
 
@@ -95,6 +97,15 @@ def response() -> dict:
 
 def test_response_accepts_bounded_patch_and_profile() -> None:
     assert validate_response(response(), release(), packet()) == response()
+
+
+def test_request_distinguishes_finding_and_evidence_ids() -> None:
+    payload = json.loads(make_request(release(), packet())["messages"][1]["content"])
+
+    assert payload["contract"]["identifier_rules"] == {
+        "finding.id": "reviewer-created label such as F1",
+        "finding.evidence": "exact value from review_packet.reference_index.evidence_ids",
+    }
 
 
 def test_response_rejects_path_escape_and_unknown_profile() -> None:

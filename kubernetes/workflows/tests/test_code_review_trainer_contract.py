@@ -76,6 +76,8 @@ def test_comparison_prompts_match_live_request_shape() -> None:
     assert payload["release"]["adapter_digest"] == prompts[-1]["expected_reviewer_identity"]
     assert payload["review_packet"]["reference_index"]["pull_request_lock_ids"] == ["pr-agent"]
     assert "tool_argument_keys" in payload["contract"]
+    assert payload["contract"]["identifier_rules"]["finding.id"].startswith("reviewer-created")
+    assert payload["contract"]["identifier_rules"]["finding.evidence"].startswith("exact value")
 
 
 def test_release_c_covers_repository_and_pull_request_inputs() -> None:
