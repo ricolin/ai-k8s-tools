@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -209,9 +211,14 @@ def test_evaluate_green_requires_tests_and_clean_final_review() -> None:
 
     value = packet()
     value["source"] = {"commit": "a" * 40}
+    value["observed"] = {
+        "patch_digest": "sha256:" + ("b" * 64),
+        "profile_id": "python-unit",
+    }
     result = evaluate_green(
         final,
-        "UNIT_TEST_STATUS=0\nSOURCE_COMMIT=" + ("a" * 40) + "\n",
+        "UNIT_TEST_STATUS=0\nSOURCE_COMMIT=" + ("a" * 40)
+        + "\nPATCH_SHA256=sha256:" + ("b" * 64) + "\nPROFILE_ID=python-unit\n",
         release(),
         value,
     )
@@ -229,20 +236,55 @@ def test_followup_packet_records_observed_patch_and_test_result() -> None:
             "evidence": [{"id": "diff-1", "kind": "source-file", "content": "old"}],
         }
     )
+    patch = response()["candidate_fix"]["unified_diff"]
     result = create_followup_packet(
         initial,
         response(),
         release(),
-        f"UNIT_TEST_STATUS=0\nSOURCE_COMMIT={source_commit}\n",
+        f"UNIT_TEST_STATUS=0\nSOURCE_COMMIT={source_commit}\n"
+        f"PATCH_SHA256=sha256:{hashlib.sha256(patch.encode()).hexdigest()}\n"
+        "PROFILE_ID=python-unit\n",
         "1 passed\n",
-        response()["candidate_fix"]["unified_diff"],
+        patch,
         1,
     )
 
     assert result["observed"]["unit_test_status"] == 0
+    assert result["observed"]["profile_id"] == "python-unit"
     assert result["instruction"].startswith("Perform the final review")
     assert len(result["reference_index"]["evidence_ids"]) == 4
     assert result["previous_response_digest"].startswith("sha256:")
+
+
+@pytest.mark.parametrize(
+    ("result_line", "message"),
+    [
+        ("PATCH_SHA256=sha256:" + ("0" * 64), "patch digest"),
+        ("PROFILE_ID=wrong-profile", "profile differs"),
+    ],
+)
+def test_followup_packet_rejects_mismatched_sandbox_evidence(result_line: str, message: str) -> None:
+    source_commit = "a" * 40
+    initial = packet()
+    initial.update(
+        {
+            "source": {"commit": source_commit},
+            "evidence": [{"id": "diff-1", "kind": "source-file", "content": "old"}],
+        }
+    )
+    patch = response()["candidate_fix"]["unified_diff"]
+    result_env = (
+        f"UNIT_TEST_STATUS=0\nSOURCE_COMMIT={source_commit}\n"
+        f"PATCH_SHA256=sha256:{hashlib.sha256(patch.encode()).hexdigest()}\n"
+        "PROFILE_ID=python-unit\n"
+    )
+    if result_line.startswith("PATCH_SHA256="):
+        result_env = re.sub(r"^PATCH_SHA256=.*$", result_line, result_env, flags=re.MULTILINE)
+    else:
+        result_env = re.sub(r"^PROFILE_ID=.*$", result_line, result_env, flags=re.MULTILINE)
+
+    with pytest.raises(ContractError, match=message):
+        create_followup_packet(initial, response(), release(), result_env, "1 passed\n", patch, 1)
 
 
 def test_response_rejects_path_escape_and_unknown_profile() -> None:
@@ -362,10 +404,15 @@ def test_green_gate_rejects_mismatched_source_lock() -> None:
     final = green_response()
     value = packet()
     value["source"] = {"commit": "a" * 40}
+    value["observed"] = {
+        "patch_digest": "sha256:" + ("c" * 64),
+        "profile_id": "python-unit",
+    }
 
     result = evaluate_green(
         final,
-        "UNIT_TEST_STATUS=0\nSOURCE_COMMIT=" + ("b" * 40) + "\n",
+        "UNIT_TEST_STATUS=0\nSOURCE_COMMIT=" + ("b" * 40)
+        + "\nPATCH_SHA256=sha256:" + ("c" * 64) + "\nPROFILE_ID=python-unit\n",
         release(),
         value,
     )

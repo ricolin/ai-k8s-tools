@@ -38,10 +38,13 @@ def test_sandbox_separates_networked_prepare_from_offline_patch_test() -> None:
     egress_values = bundle["fetch-egress.json"]["spec"]["podSelector"]["matchExpressions"][0]["values"]
     assert egress_values == ["fetch", "prepare"]
     assert "git apply --check" in bundle["test-script.json"]["data"]["run.sh"]
+    assert "git add --intent-to-add -- ." in bundle["test-script.json"]["data"]["run.sh"]
     assert 'if [ "${status}" -eq 0 ]; then' in bundle["test-script.json"]["data"]["run.sh"]
     assert "printf '%s\\n' '$ '" in bundle["test-script.json"]["data"]["run.sh"]
     assert "break" not in bundle["test-script.json"]["data"]["run.sh"]
     assert "sha256sum fix.patch > fix.patch.sha256" in bundle["test-script.json"]["data"]["run.sh"]
+    assert "PATCH_SHA256=sha256:" in bundle["test-script.json"]["data"]["run.sh"]
+    assert "PROFILE_ID=%s\\n' 'python-unit'" in bundle["test-script.json"]["data"]["run.sh"]
     assert bundle["test-script.json"]["data"]["fix.patch"] == fix["unified_diff"]
     fetch = bundle["fetch-script.json"]["data"]["run.sh"]
     assert "cd /tmp" in fetch

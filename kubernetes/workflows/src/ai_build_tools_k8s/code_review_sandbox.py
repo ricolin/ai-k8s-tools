@@ -96,7 +96,7 @@ def fetch_script(repository: str, commit: str) -> str:
     ) + "\n"
 
 
-def patch_test_script(commands: list[list[str]], patch_present: bool) -> str:
+def patch_test_script(commands: list[list[str]], patch_present: bool, profile_id: str) -> str:
     lines = [
         "#!/usr/bin/env bash",
         "set -uo pipefail",
@@ -109,7 +109,8 @@ def patch_test_script(commands: list[list[str]], patch_present: bool) -> str:
             [
                 "git apply --check /opt/review/fix.patch || exit 21",
                 "git apply /opt/review/fix.patch || exit 22",
-                "git diff --check || exit 23",
+                "git add --intent-to-add -- . || exit 23",
+                "git diff --check || exit 24",
             ]
         )
     lines.extend(["status=0", ": > /workspace/results/unit-tests.log"])
@@ -127,6 +128,8 @@ def patch_test_script(commands: list[list[str]], patch_present: bool) -> str:
             "(cd /workspace/results && sha256sum fix.patch > fix.patch.sha256)",
             "printf 'UNIT_TEST_STATUS=%s\\n' \"${status}\" > /workspace/results/result.env",
             "printf 'SOURCE_COMMIT=%s\\n' \"$(git rev-parse HEAD)\" >> /workspace/results/result.env",
+            "printf 'PATCH_SHA256=sha256:%s\\n' \"$(sha256sum /workspace/results/fix.patch | awk '{print $1}')\" >> /workspace/results/result.env",
+            f"printf 'PROFILE_ID=%s\\n' {shell_quote(profile_id)} >> /workspace/results/result.env",
             "exit \"${status}\"",
         ]
     )
@@ -255,7 +258,7 @@ def render_bundle(
         }
     validate_candidate_fix(candidate_fix)
     patch_present = candidate_fix["status"] == "PROPOSED"
-    test_script = patch_test_script(profile["test_commands"], patch_present)
+    test_script = patch_test_script(profile["test_commands"], patch_present, profile["id"])
     image_pull_policy = str(profile.get("image_pull_policy", "IfNotPresent"))
     fetch_image_id = str(profile.get("fetch_image_id", ""))
     runner_image_id = str(profile.get("runner_image_id", ""))

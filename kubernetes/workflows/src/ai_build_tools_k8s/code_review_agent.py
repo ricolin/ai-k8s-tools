@@ -343,13 +343,18 @@ def create_followup_packet(
     require(fix["status"] == "PROPOSED", "follow-up requires a proposed candidate fix")
     require(patch, "follow-up requires the observed repository patch")
     require(len(index["repository_lock_ids"]) == 1, "follow-up requires exactly one repository lock")
+    require(len(index["profile_ids"]) == 1, "follow-up requires exactly one profile")
     repository_lock = sorted(index["repository_lock_ids"])[0]
+    profile_id = sorted(index["profile_ids"])[0]
+    patch_digest = f"sha256:{hashlib.sha256(patch.encode()).hexdigest()}"
+    require(values.get("PATCH_SHA256") == patch_digest, "sandbox patch digest differs from observed patch")
+    require(values.get("PROFILE_ID") == profile_id, "sandbox profile differs from the packet")
     prefix = f"{repository_lock}:iteration-{iteration}"
     observed = [
         {
             "id": f"{prefix}:patch",
             "kind": "applied-patch",
-            "sha256": f"sha256:{hashlib.sha256(patch.encode()).hexdigest()}",
+            "sha256": patch_digest,
             "content": patch,
         },
         {
@@ -362,6 +367,8 @@ def create_followup_packet(
             "id": f"{prefix}:result",
             "kind": "sandbox-result",
             "source_commit": source_commit,
+            "profile_id": profile_id,
+            "patch_digest": patch_digest,
             "unit_test_status": int(status),
         },
     ]
@@ -378,8 +385,9 @@ def create_followup_packet(
     result["previous_response_digest"] = f"sha256:{hashlib.sha256(canonical_json(response)).hexdigest()}"
     result["observed"] = {
         "source_commit": source_commit,
+        "profile_id": profile_id,
         "unit_test_status": int(status),
-        "patch_digest": observed[0]["sha256"],
+        "patch_digest": patch_digest,
     }
     validate_packet(result)
     return result
@@ -400,11 +408,24 @@ def evaluate_green(
     review = response.get("review", {})
     fix = response.get("candidate_fix", {})
     source_commit = str(packet.get("source", {}).get("commit", ""))
+    observed = packet.get("observed", {})
+    profile_ids = validate_packet(packet)["profile_ids"]
     checks = {
         "unit_test_status_zero": values.get("UNIT_TEST_STATUS") == "0",
         "source_commit_matches_lock": (
             bool(re.fullmatch(r"[0-9a-f]{40}", source_commit))
             and values.get("SOURCE_COMMIT") == source_commit
+        ),
+        "patch_digest_matches_packet": (
+            isinstance(observed, dict)
+            and bool(re.fullmatch(r"sha256:[0-9a-f]{64}", str(observed.get("patch_digest", ""))))
+            and values.get("PATCH_SHA256") == observed.get("patch_digest")
+        ),
+        "profile_id_matches_packet": (
+            len(profile_ids) == 1
+            and values.get("PROFILE_ID") == next(iter(profile_ids))
+            and isinstance(observed, dict)
+            and observed.get("profile_id") == values.get("PROFILE_ID")
         ),
         "final_verdict_green": review.get("verdict") in {"APPROVE", "COMMENT"},
         "remaining_findings_zero": review.get("findings") == [],
