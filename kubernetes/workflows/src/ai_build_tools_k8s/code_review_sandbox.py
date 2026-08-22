@@ -104,7 +104,7 @@ def patch_test_script(commands: list[list[str]], patch_present: bool) -> str:
     lines.extend(
         [
             "git diff --no-ext-diff --src-prefix=a/ --dst-prefix=b/ > /workspace/results/fix.patch",
-            "sha256sum /workspace/results/fix.patch > /workspace/results/fix.patch.sha256",
+            "(cd /workspace/results && sha256sum fix.patch > fix.patch.sha256)",
             "printf 'UNIT_TEST_STATUS=%s\\n' \"${status}\" > /workspace/results/result.env",
             "printf 'SOURCE_COMMIT=%s\\n' \"$(git rev-parse HEAD)\" >> /workspace/results/result.env",
             "exit \"${status}\"",
