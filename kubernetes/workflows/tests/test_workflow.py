@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import re
 import threading
 import urllib.request
 from pathlib import Path
@@ -180,6 +181,13 @@ def test_pipeline_defaults_are_provider_neutral(tmp_path: Path) -> None:
         compiler.Compiler().compile(pipeline, str(output))
         rendered = output.read_text()
         assert "defaultValue: kubernetes-fixture" in rendered
+
+
+def test_local_path_helper_image_is_digest_pinned() -> None:
+    versions = (Path(__file__).parents[2] / "versions.env").read_text()
+    match = re.search(r"^LOCAL_PATH_HELPER_IMAGE=(.+)$", versions, flags=re.MULTILINE)
+    assert match is not None
+    assert re.fullmatch(r".+@sha256:[a-f0-9]{64}", match.group(1))
 
 
 def test_runtime_health_and_prediction(tmp_path: Path) -> None:

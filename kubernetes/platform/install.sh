@@ -4,6 +4,11 @@ set -euo pipefail
 root_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 source "${root_dir}/kubernetes/versions.env"
 
+[[ ${LOCAL_PATH_HELPER_IMAGE} =~ ^.+@sha256:[a-f0-9]{64}$ ]] || {
+  echo "LOCAL_PATH_HELPER_IMAGE must be digest-pinned" >&2
+  exit 1
+}
+
 : "${KUBECONFIG:?set KUBECONFIG to the target Kubernetes cluster}"
 profile_file=${PROFILE_FILE:-${root_dir}/kubernetes/profiles/kubernetes-fixture.env}
 source "${profile_file}"
