@@ -30,6 +30,8 @@ def test_dataset_copies_distinct_reviewer_identities() -> None:
 
     assert first_user["reviewer_identity"] == first_answer["reviewer_identity"]
     assert first_user["reviewer_identity"] != second_user["reviewer_identity"]
+    assert "exactly these top-level fields" in first["messages"][0]["content"]
+    assert "no Markdown fences" in first["messages"][0]["content"]
 
 
 def test_quality_gate_rejects_wrong_reviewer_identity() -> None:
