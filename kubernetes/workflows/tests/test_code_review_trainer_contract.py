@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 
@@ -19,6 +20,13 @@ def load_module(name: str, relative_path: str):
 
 generator = load_module("code_review_dataset", "kubernetes-CUDA/code-review/generate_dataset.py")
 quality_gate = load_module("code_review_quality_gate", "kubernetes-CUDA/code-review/quality_gate.py")
+
+trainer_path = ROOT / "kubernetes-CUDA/common/text_adapter_trainer.py"
+trainer_spec = importlib.util.spec_from_file_location("text_adapter_trainer", trainer_path)
+assert trainer_spec is not None and trainer_spec.loader is not None
+trainer = importlib.util.module_from_spec(trainer_spec)
+sys.modules[trainer_spec.name] = trainer
+trainer_spec.loader.exec_module(trainer)
 
 
 def test_dataset_copies_distinct_reviewer_identities() -> None:
@@ -86,3 +94,51 @@ def test_release_c_covers_repository_and_pull_request_inputs() -> None:
 
     assert repository["review_packet"]["reference_index"]["pull_request_lock_ids"] == []
     assert pull_request["review_packet"]["reference_index"]["pull_request_lock_ids"] == ["pr-c-0001"]
+
+
+def test_code_review_image_uses_only_the_neutral_training_runtime() -> None:
+    dockerfile = (ROOT / "kubernetes-CUDA/code-review/Dockerfile").read_text()
+
+    assert "kubernetes-CUDA/common/text_adapter_trainer.py" in dockerfile
+    assert "kubernetes-CUDA/security" not in dockerfile
+    assert "serve_adviser.py" not in dockerfile
+    assert "generate_agent_response.py" not in dockerfile
+
+
+def test_neutral_training_runtime_keeps_the_release_chain_contract(tmp_path: Path) -> None:
+    for name in ("foundation", "tokenizer", "dataset", "parent"):
+        (tmp_path / name).mkdir()
+    value = {
+        "schema_version": "1.0.0",
+        "stage": "B",
+        "foundation_path": str(tmp_path / "foundation"),
+        "foundation_digest": "sha256:" + ("a" * 64),
+        "tokenizer_path": str(tmp_path / "tokenizer"),
+        "dataset_root": str(tmp_path / "dataset"),
+        "dataset_manifest": str(tmp_path / "dataset/manifest.json"),
+        "dataset_manifest_digest": "sha256:" + ("b" * 64),
+        "parent_adapter_path": str(tmp_path / "parent"),
+        "parent_adapter_digest": "sha256:" + ("c" * 64),
+        "output_dir": str(tmp_path / "release-b"),
+        "training_stages": ["A", "B"],
+        "training": {
+            "expected_gpu_count": 8,
+            "max_steps": 2,
+            "save_steps": 1,
+            "sequence_length": 128,
+            "per_device_batch_size": 1,
+            "gradient_accumulation_steps": 1,
+            "lora_rank": 8,
+            "lora_alpha": 16,
+            "learning_rate": 0.0001,
+            "weight_decay": 0.0,
+            "warmup_ratio": 0.0,
+            "max_grad_norm": 1.0,
+            "lora_dropout": 0.0,
+            "target_modules": ["q_proj"],
+        },
+    }
+
+    validated = trainer.validate_training_config(value)
+    assert validated["stage"] == "B"
+    assert trainer.SupervisedFineTuningDataset.__name__ == "SupervisedFineTuningDataset"
