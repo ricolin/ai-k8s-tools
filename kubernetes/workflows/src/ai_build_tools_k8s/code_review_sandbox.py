@@ -8,7 +8,13 @@ from typing import Any
 from urllib.parse import urlparse
 
 from ai_build_tools_k8s.code_review_agent import validate_candidate_fix
-from ai_build_tools_k8s.code_review_model import ContractError, load_json, require, require_image
+from ai_build_tools_k8s.code_review_model import (
+    ContractError,
+    load_json,
+    require,
+    require_image,
+    require_sha256,
+)
 from ai_build_tools_k8s.workflow import add_control_plane_tolerations, write_json
 
 
@@ -39,8 +45,17 @@ def validate_source_lock(lock: dict[str, Any]) -> dict[str, Any]:
 def validate_profile(profile: dict[str, Any]) -> dict[str, Any]:
     require(profile.get("schema_version") == "1.0.0", "unsupported profile schema")
     require(isinstance(profile.get("id"), str) and profile["id"], "profile id is required")
-    for field in ("fetch_image", "runner_image"):
-        require_image(str(profile.get(field, "")), field)
+    pull_policy = str(profile.get("image_pull_policy", "IfNotPresent"))
+    require(pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
+    for prefix in ("fetch", "runner"):
+        image = str(profile.get(f"{prefix}_image", ""))
+        image_id = str(profile.get(f"{prefix}_image_id", ""))
+        if pull_policy == "Never":
+            require(":" in image and "@" not in image, f"{prefix}_image must be an explicit node-local tag")
+            require_sha256(image_id, f"{prefix}_image_id")
+        else:
+            require_image(image, f"{prefix}_image")
+            require(not image_id, f"{prefix}_image_id is only valid with Never")
     for field in ("prepare_commands", "test_commands"):
         commands = profile.get(field)
         require(isinstance(commands, list), f"{field} must be a list")
@@ -144,6 +159,8 @@ def job(
     pvc: str,
     network_stage: str,
     timeout_seconds: int,
+    image_pull_policy: str,
+    node_local_image_id: str,
     script_config_map: str = "",
     tolerate_control_plane: bool = False,
 ) -> dict[str, Any]:
@@ -168,7 +185,7 @@ def job(
             {
                 "name": "runner",
                 "image": image,
-                "imagePullPolicy": "IfNotPresent",
+                "imagePullPolicy": image_pull_policy,
                 "command": command,
                 "env": [
                     {"name": "HOME", "value": "/home/sandbox"},
@@ -185,10 +202,15 @@ def job(
         "volumes": volumes,
     }
     add_control_plane_tolerations(pod_spec, tolerate_control_plane)
+    metadata: dict[str, Any] = {"name": name, "namespace": namespace}
+    if node_local_image_id:
+        metadata["annotations"] = {
+            "ai-k8s-tools.ricolin.dev/node-local-image-id": node_local_image_id,
+        }
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
-        "metadata": {"name": name, "namespace": namespace},
+        "metadata": metadata,
         "spec": {
             "backoffLimit": 0,
             "activeDeadlineSeconds": timeout_seconds,
@@ -234,6 +256,9 @@ def render_bundle(
     validate_candidate_fix(candidate_fix)
     patch_present = candidate_fix["status"] == "PROPOSED"
     test_script = patch_test_script(profile["test_commands"], patch_present)
+    image_pull_policy = str(profile.get("image_pull_policy", "IfNotPresent"))
+    fetch_image_id = str(profile.get("fetch_image_id", ""))
+    runner_image_id = str(profile.get("runner_image_id", ""))
     pvc_spec: dict[str, Any] = {
         "accessModes": ["ReadWriteOnce"],
         "resources": {"requests": {"storage": "20Gi"}},
@@ -315,6 +340,8 @@ def render_bundle(
             pvc,
             "fetch",
             int(profile["timeout_seconds"]),
+            image_pull_policy,
+            fetch_image_id,
             f"{profile_name}-fetch",
             tolerate_control_plane,
         ),
@@ -326,6 +353,8 @@ def render_bundle(
             pvc,
             "prepare",
             int(profile["timeout_seconds"]),
+            image_pull_policy,
+            runner_image_id,
             f"{profile_name}-prepare",
             tolerate_control_plane,
         ),
@@ -337,6 +366,8 @@ def render_bundle(
             pvc,
             "test",
             int(profile["timeout_seconds"]),
+            image_pull_policy,
+            runner_image_id,
             f"{profile_name}-test",
             tolerate_control_plane,
         ),
@@ -346,6 +377,9 @@ def render_bundle(
             "repository": lock["repository"],
             "commit": lock["commit"],
             "profile_id": profile["id"],
+            "image_pull_policy": image_pull_policy,
+            "fetch_image_id": fetch_image_id or None,
+            "runner_image_id": runner_image_id or None,
             "patch_id": candidate_fix["patch_id"],
             "outputs": [
                 "/workspace/results/fix.patch",

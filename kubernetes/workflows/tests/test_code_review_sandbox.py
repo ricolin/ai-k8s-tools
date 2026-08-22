@@ -75,6 +75,48 @@ def test_sandbox_can_tolerate_control_plane_taints() -> None:
         ]
 
 
+def test_sandbox_supports_observed_node_local_images() -> None:
+    source = {"id": "repo-1", "repository": "https://github.com/example/project", "commit": "a" * 40}
+    profile = {
+        "schema_version": "1.0.0",
+        "id": "python-unit",
+        "image_pull_policy": "Never",
+        "fetch_image": "example.local/reviewer:locked",
+        "fetch_image_id": "sha256:" + ("b" * 64),
+        "runner_image": "example.local/reviewer:locked",
+        "runner_image_id": "sha256:" + ("b" * 64),
+        "prepare_commands": [],
+        "test_commands": [["python", "-m", "pytest"]],
+        "timeout_seconds": 1800,
+    }
+
+    bundle = render_bundle(source, profile, "review-run", "review-workspace", "local-path")
+
+    for name in ("fetch-job.json", "prepare-job.json", "test-job.json"):
+        assert bundle[name]["spec"]["template"]["spec"]["containers"][0]["imagePullPolicy"] == "Never"
+        assert bundle[name]["metadata"]["annotations"]["ai-k8s-tools.ricolin.dev/node-local-image-id"] == (
+            "sha256:" + ("b" * 64)
+        )
+    assert bundle["result-contract.json"]["image_pull_policy"] == "Never"
+
+
+def test_sandbox_rejects_node_local_image_without_observed_id() -> None:
+    source = {"id": "repo-1", "repository": "https://github.com/example/project", "commit": "a" * 40}
+    profile = {
+        "schema_version": "1.0.0",
+        "id": "python-unit",
+        "image_pull_policy": "Never",
+        "fetch_image": "example.local/reviewer:locked",
+        "runner_image": "example.local/reviewer:locked",
+        "prepare_commands": [],
+        "test_commands": [["python", "-m", "pytest"]],
+        "timeout_seconds": 1800,
+    }
+
+    with pytest.raises(ContractError, match="fetch_image_id"):
+        render_bundle(source, profile, "review-run", "review-workspace", "local-path")
+
+
 @pytest.mark.parametrize(
     "repository",
     [

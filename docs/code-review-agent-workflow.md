@@ -47,7 +47,13 @@ Prepare:
 2. A source lock with `id`, public HTTPS `repository`, and exact 40-character `commit`.
 3. Optional pull-request lock with immutable base/head commits and a captured diff digest.
 4. A review packet containing source/diff evidence and a complete reference index.
-5. One or more operator-reviewed test profiles using digest-pinned fetch and runner images.
+5. One or more operator-reviewed test profiles using digest-pinned registry
+   images or observed node-local image IDs.
+
+For a preloaded image, set `image_pull_policy` to `Never`, use an explicit
+immutable tag, and record the observed CRI image ID in `fetch_image_id` and
+`runner_image_id`. Omitting `image_pull_policy` preserves the registry-backed
+`IfNotPresent` contract and requires digest references.
 
 Generate the model request instead of hand-writing it:
 
