@@ -88,6 +88,36 @@ unit-test command without egress, and writes `fix.patch`, its digest,
 the candidate is not accepted; retain its logs and request a new model attempt
 against those supplied results.
 
+## Export The Patch And Report
+
+Mount the sandbox PVC in a short-lived restricted reader Pod and copy these
+files from `/workspace/results` into the run evidence directory:
+
+```text
+fix.patch
+fix.patch.sha256
+unit-tests.log
+result.env
+```
+
+Accept the candidate only after all of these checks pass:
+
+```bash
+(cd results && sha256sum -c fix.patch.sha256)
+grep -Fx 'UNIT_TEST_STATUS=0' results/result.env
+grep -Fx "SOURCE_COMMIT=${SOURCE_COMMIT}" results/result.env
+
+git clone --filter=blob:none --no-checkout "${REPOSITORY}" verify-checkout
+git -C verify-checkout checkout --detach "${SOURCE_COMMIT}"
+git -C verify-checkout apply --check "${PWD}/results/fix.patch"
+test -z "$(git -C verify-checkout status --porcelain)"
+```
+
+The final `review-report.json` must combine, without rewriting, the validated
+model `review`, `candidate_fix`, and `execution_plan` with the observed source
+commit, patch digest, and unit-test result. The report and patch are outputs;
+the workflow does not commit, push, comment, or create a pull request.
+
 ## Result Boundary
 
 An accepted run produces a review report plus a test-passing `fix.patch`.
