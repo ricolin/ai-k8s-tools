@@ -65,6 +65,7 @@ def fetch_script(repository: str, commit: str) -> str:
         [
             "#!/bin/sh",
             "set -eu",
+            "cd /tmp",
             "if [ -e /workspace/source ]; then",
             "  test -d /workspace/source",
             "  test -z \"$(find /workspace/source -mindepth 1 -maxdepth 1 -print -quit)\"",

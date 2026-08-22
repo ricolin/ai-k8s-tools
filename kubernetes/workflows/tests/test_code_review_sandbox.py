@@ -37,6 +37,7 @@ def test_sandbox_separates_networked_prepare_from_offline_patch_test() -> None:
     assert "git apply --check" in bundle["test-script.json"]["data"]["run.sh"]
     assert bundle["test-script.json"]["data"]["fix.patch"] == fix["unified_diff"]
     fetch = bundle["fetch-script.json"]["data"]["run.sh"]
+    assert "cd /tmp" in fetch
     assert "find /workspace/source -mindepth 1" in fetch
     assert "rmdir /workspace/source" in fetch
     assert "GIT_TERMINAL_PROMPT=0 git clone" in fetch
