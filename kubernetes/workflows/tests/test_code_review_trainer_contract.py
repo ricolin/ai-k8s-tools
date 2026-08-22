@@ -146,6 +146,14 @@ def test_release_c_training_includes_resolved_green_reviews() -> None:
     assert answer["candidate_fix"]["status"] == "NOT_NEEDED"
 
 
+def test_release_c_candidate_plans_reinforce_true_cleanup_for_final_review() -> None:
+    answer = json.loads(generator.record("C", 0)["messages"][2]["content"])
+    tasks = answer["execution_plan"]["tasks"]
+
+    assert all(task["cleanup_required"] is True for task in tasks)
+    assert [task["tool"] for task in tasks][-2:] == ["collect_test_results", "draft_review"]
+
+
 def test_code_review_image_uses_only_the_neutral_training_runtime() -> None:
     dockerfile = (ROOT / "kubernetes-CUDA/code-review/Dockerfile").read_text()
 

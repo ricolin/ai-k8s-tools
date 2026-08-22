@@ -247,6 +247,24 @@ def response(
                 "cleanup_required": True,
             }
         )
+        tasks.extend(
+            [
+                {
+                    "id": "collect-results",
+                    "tool": "collect_test_results",
+                    "arguments": {"evidence_ids": [evidence]},
+                    "timeout_seconds": 60,
+                    "cleanup_required": True,
+                },
+                {
+                    "id": "draft-final-review",
+                    "tool": "draft_review",
+                    "arguments": {"evidence_ids": [evidence]},
+                    "timeout_seconds": 60,
+                    "cleanup_required": True,
+                },
+            ]
+        )
     return {
         "reviewer_identity": identity,
         "review": {
