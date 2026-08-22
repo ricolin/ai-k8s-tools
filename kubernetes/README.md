@@ -47,3 +47,18 @@ plan and reusable H200 validation templates are in
 The released-adviser and reports-only agent path is documented in
 [the grounded security-agent guide](../docs/security-agent-workflow.md), with
 failure recovery in [troubleshooting](../docs/troubleshooting.md).
+
+## Rendered manifest validation
+
+Shell-rendered manifests must be checked before they reach the API server. The
+validator rejects missing files and empty container image values, including
+quoted empty strings:
+
+```bash
+./kubernetes/tools/validate-rendered-manifest.sh /path/to/rendered.yaml
+kubectl apply --dry-run=server -f /path/to/rendered.yaml
+```
+
+Use both gates. The repository validator gives a focused error for accidental
+empty image variables; the API server dry run validates the complete resource
+against the target cluster.
