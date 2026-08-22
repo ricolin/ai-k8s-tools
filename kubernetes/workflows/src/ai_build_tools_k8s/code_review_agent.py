@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,13 @@ TOOL_ARGUMENT_KEYS = {
     "collect_test_results": {"evidence_ids"},
     "export_patch": {"patch_id", "repository_lock_id"},
     "draft_review": {"evidence_ids"},
+}
+LANGUAGE_SUFFIXES = {
+    "bash": {".bash", ".sh"},
+    "go": {".go"},
+    "python": {".py"},
+    "rust": {".rs"},
+    "yaml": {".yaml", ".yml"},
 }
 
 
@@ -174,6 +182,114 @@ def parse_intent(text: str) -> dict[str, Any]:
         "controller_requirements": ["resolve_exact_source_commit", "select_operator_approved_test_profile"],
         "retain_resources": True,
         "publish": False,
+    }
+
+
+def git_output(checkout: Path, *args: str) -> str:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(checkout), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError) as error:
+        raise ContractError(f"git command failed: {' '.join(args)}") from error
+    return completed.stdout.strip()
+
+
+def collect_packet(
+    intent: dict[str, Any],
+    source_lock: dict[str, Any],
+    release: dict[str, Any],
+    profile_id: str,
+    checkout: Path,
+    max_files: int = 8,
+    max_file_bytes: int = 4096,
+    max_total_bytes: int = 24576,
+) -> dict[str, Any]:
+    validate_release(release)
+    require(intent.get("schema_version") == SCHEMA_VERSION, "unsupported intent schema")
+    require(intent.get("repository") == source_lock.get("repository"), "intent and source lock differ")
+    require(isinstance(profile_id, str) and profile_id, "profile id is required")
+    require(1 <= max_files <= 32, "max_files is invalid")
+    require(256 <= max_file_bytes <= 65536, "max_file_bytes is invalid")
+    require(max_file_bytes <= max_total_bytes <= 262144, "max_total_bytes is invalid")
+    commit = str(source_lock.get("commit", ""))
+    require(bool(re.fullmatch(r"[0-9a-f]{40}", commit)), "source lock commit is invalid")
+    lock_id = source_lock.get("id")
+    require(isinstance(lock_id, str) and lock_id, "source lock id is required")
+    require(checkout.is_dir(), "checkout is missing")
+    require(git_output(checkout, "rev-parse", "HEAD") == commit, "checkout commit differs from source lock")
+    require(not git_output(checkout, "status", "--porcelain"), "checkout must be clean")
+
+    scope = intent.get("scope", {})
+    languages = scope.get("languages")
+    require(isinstance(languages, list) and languages, "intent language scope is required")
+    require(set(languages) <= set(LANGUAGE_SUFFIXES), "intent contains an unsupported language")
+    suffixes = set().union(*(LANGUAGE_SUFFIXES[language] for language in languages))
+    evidence: list[dict[str, Any]] = []
+    total = 0
+    tracked_paths = sorted(value for value in git_output(checkout, "ls-files", "-z").split("\0") if value)
+    for relative in tracked_paths:
+        if len(evidence) >= max_files or total >= max_total_bytes:
+            break
+        path = checkout / relative
+        if not path.is_file() or path.is_symlink() or path.suffix.lower() not in suffixes:
+            continue
+        raw = path.read_bytes()[:max_file_bytes]
+        try:
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        remaining = max_total_bytes - total
+        content = content[:remaining]
+        if not content.strip():
+            continue
+        identifier = f"{lock_id}:source-{len(evidence) + 1:02d}"
+        evidence.append(
+            {
+                "id": identifier,
+                "kind": "source-file",
+                "path": Path(relative).as_posix(),
+                "line_start": 1,
+                "content": content,
+                "truncated": path.stat().st_size > len(raw) or len(content.encode()) < len(raw),
+            }
+        )
+        total += len(content.encode())
+    require(evidence, "no source files match the requested language scope")
+
+    pull_request_lock = source_lock.get("pull_request_lock_id")
+    require(
+        pull_request_lock is None or isinstance(pull_request_lock, str) and pull_request_lock,
+        "pull request lock id is invalid",
+    )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "instruction": (
+            "Review only the supplied immutable source evidence. Propose one minimal patch only when justified, "
+            "and select only the supplied test profile."
+        ),
+        "reference_index": {
+            "repository_lock_ids": [lock_id],
+            "pull_request_lock_ids": [pull_request_lock] if pull_request_lock else [],
+            "profile_ids": [profile_id],
+            "evidence_ids": [item["id"] for item in evidence],
+        },
+        "source": {
+            "repository": source_lock["repository"],
+            "commit": commit,
+            "requested_languages": languages,
+            "files_included": len(evidence),
+            "content_bytes": total,
+            "limits": {
+                "max_files": max_files,
+                "max_file_bytes": max_file_bytes,
+                "max_total_bytes": max_total_bytes,
+            },
+        },
+        "evidence": evidence,
     }
 
 
@@ -351,6 +467,17 @@ def build_parser() -> argparse.ArgumentParser:
     gate.add_argument("--result-env", required=True)
     gate.add_argument("--output", required=True)
 
+    packet = commands.add_parser("collect-packet")
+    packet.add_argument("--intent", required=True)
+    packet.add_argument("--source-lock", required=True)
+    packet.add_argument("--release", required=True)
+    packet.add_argument("--profile-id", required=True)
+    packet.add_argument("--checkout", required=True)
+    packet.add_argument("--max-files", type=int, default=8)
+    packet.add_argument("--max-file-bytes", type=int, default=4096)
+    packet.add_argument("--max-total-bytes", type=int, default=24576)
+    packet.add_argument("--output", required=True)
+
     execute = commands.add_parser("run")
     execute.add_argument("--release", required=True)
     execute.add_argument("--packet", required=True)
@@ -372,6 +499,20 @@ def main() -> None:
             write_json(
                 Path(args.output),
                 evaluate_green(load_json(Path(args.response)), Path(args.result_env).read_text()),
+            )
+        elif args.command == "collect-packet":
+            write_json(
+                Path(args.output),
+                collect_packet(
+                    load_json(Path(args.intent)),
+                    load_json(Path(args.source_lock)),
+                    load_json(Path(args.release)),
+                    args.profile_id,
+                    Path(args.checkout),
+                    args.max_files,
+                    args.max_file_bytes,
+                    args.max_total_bytes,
+                ),
             )
         elif args.command == "validate-response":
             validate_response(

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import subprocess
+from pathlib import Path
 
 import pytest
 
 from ai_build_tools_k8s.code_review_agent import (
+    collect_packet,
     evaluate_green,
     make_request,
     parse_intent,
@@ -215,3 +218,45 @@ def test_response_rejects_invalid_review_list_items(field: str) -> None:
 
     with pytest.raises(ContractError, match=f"review {field} contain"):
         validate_response(invalid, release(), packet())
+
+
+def test_collect_packet_locks_clean_checkout_and_language_scope(tmp_path: Path) -> None:
+    checkout = tmp_path / "source"
+    checkout.mkdir()
+    (checkout / "scripts").mkdir()
+    (checkout / "scripts/check.sh").write_text("#!/bin/sh\nprintf '%s\\n' ok\n")
+    (checkout / "ignored.py").write_text("print('not in bash scope')\n")
+    subprocess.run(["git", "init", str(checkout)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(checkout), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git", "-C", str(checkout),
+            "-c", "user.name=Test", "-c", "user.email=test@example.com",
+            "commit", "-m", "fixture",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    commit = subprocess.run(
+        ["git", "-C", str(checkout), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    intent = parse_intent("go review https://github.com/ricolin/ai-build-tools/ on the bash scripts")
+    source_lock = {
+        "id": f"repo-{commit[:12]}",
+        "repository": intent["repository"],
+        "commit": commit,
+    }
+
+    result = collect_packet(intent, source_lock, release(), "bash-unit", checkout)
+
+    assert result["source"]["commit"] == commit
+    assert result["source"]["requested_languages"] == ["bash"]
+    assert [item["path"] for item in result["evidence"]] == ["scripts/check.sh"]
+    assert result["reference_index"]["profile_ids"] == ["bash-unit"]
+
+    (checkout / "scripts/check.sh").write_text("dirty\n")
+    with pytest.raises(ContractError, match="checkout must be clean"):
+        collect_packet(intent, source_lock, release(), "bash-unit", checkout)
