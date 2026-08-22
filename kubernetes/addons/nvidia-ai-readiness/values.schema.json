@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "profile": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {"enabled": {"type": "boolean", "default": false}}
+    },
+    "readiness": {
+      "type": "object",
+      "required": [
+        "enabled", "orchestratorImage", "cudaSmokeImage",
+        "expectedGpuNodes", "expectedGpuCountPerNode", "fullNodeGpuCount",
+        "stageTimeoutSeconds", "activeDeadlineSeconds"
+      ],
+      "properties": {
+        "enabled": {"type": "boolean", "default": false},
+        "orchestratorImage": {"type": "string"},
+        "cudaSmokeImage": {"type": "string"},
+        "expectedGpuNodes": {"type": "integer", "minimum": 1},
+        "expectedGpuCountPerNode": {"type": "integer", "minimum": 1},
+        "fullNodeGpuCount": {"type": "integer", "minimum": 1},
+        "stageTimeoutSeconds": {"type": "integer", "minimum": 60, "maximum": 7200},
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 120, "maximum": 14400}
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "required": [
+        "minimumKubernetesMinor", "requireLinuxNodes", "requireAmd64Nodes",
+        "allowPreinstalledDriverFallback"
+      ],
+      "properties": {
+        "minimumKubernetesMinor": {"type": "integer", "minimum": 16},
+        "requireLinuxNodes": {"type": "boolean"},
+        "requireAmd64Nodes": {"type": "boolean"},
+        "allowPreinstalledDriverFallback": {"type": "boolean", "default": false}
+      }
+    }
+  }
+}

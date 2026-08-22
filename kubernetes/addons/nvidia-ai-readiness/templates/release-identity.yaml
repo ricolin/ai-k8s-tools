@@ -1,0 +1,16 @@
+{{- include "nvidia-ai-readiness.validate" . -}}
+{{- if .Values.profile.enabled }}
+{{- $gpuOperator := index .Values "gpu-operator" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nvidia-ai-readiness.fullname" . }}-identity
+  labels:
+    {{- include "nvidia-ai-readiness.labels" . | nindent 4 }}
+data:
+  chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
+  appVersion: {{ .Chart.AppVersion | quote }}
+  operatorChart: "gpu-operator-v26.7.0"
+  operatorChartArchiveSha256: "6d1b282d74288be206c66dfe49073b7c85c209e92826c27f6507429055e2e102"
+  driverMode: {{ ternary "managed" "preinstalled" $gpuOperator.driver.enabled | quote }}
+{{- end }}

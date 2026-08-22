@@ -1,0 +1,14 @@
+enabled: true
+storage:
+  mode: static-local
+  size: 1Ti
+  retentionPolicy: Keep
+  staticLocal:
+    storageClassName: replace-workspace
+    persistentVolumeName: replace-workspace
+    path: /replace/retained/workspace
+    nodeSelectorValue: replace-node-name
+    reclaimPolicy: Retain
+validation:
+  enabled: true
+  image: registry.example/storage-probe@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

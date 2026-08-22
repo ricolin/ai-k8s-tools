@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ai-model-workspace
+description: Retained or dynamic workspace contract for AI model workflows
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

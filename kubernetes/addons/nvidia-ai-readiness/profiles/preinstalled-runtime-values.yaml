@@ -1,0 +1,14 @@
+# Conditional fallback only. This profile remains disabled until a separately
+# accepted image proves the exact host driver and Container Toolkit contract.
+profile:
+  enabled: false
+gpu-operator:
+  enabled: false
+  driver:
+    enabled: false
+  toolkit:
+    enabled: false
+readiness:
+  enabled: false
+compatibility:
+  allowPreinstalledDriverFallback: true

@@ -1,0 +1,144 @@
+{{- include "ai-model-workspace.validate" . -}}
+{{- if .Values.enabled }}
+{{- if .Values.namespace.create }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace.name }}
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    ai-build-tools.ricolin.dev/workload: model-release
+---
+{{- end }}
+{{- if eq .Values.storage.mode "static-local" }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.storage.staticLocal.storageClassName }}
+  labels:
+    {{- include "ai-model-workspace.labels" . | nindent 4 }}
+  {{- if eq .Values.storage.retentionPolicy "Keep" }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: {{ .Values.storage.staticLocal.reclaimPolicy }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .Values.storage.staticLocal.persistentVolumeName }}
+  labels:
+    {{- include "ai-model-workspace.labels" . | nindent 4 }}
+  {{- if eq .Values.storage.retentionPolicy "Keep" }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  capacity:
+    storage: {{ .Values.storage.size }}
+  accessModes:
+    {{- toYaml .Values.storage.accessModes | nindent 4 }}
+  persistentVolumeReclaimPolicy: {{ .Values.storage.staticLocal.reclaimPolicy }}
+  storageClassName: {{ .Values.storage.staticLocal.storageClassName }}
+  local:
+    path: {{ .Values.storage.staticLocal.path | quote }}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: {{ .Values.storage.staticLocal.nodeSelectorKey }}
+              operator: In
+              values: [{{ .Values.storage.staticLocal.nodeSelectorValue | quote }}]
+---
+{{- end }}
+{{- if .Values.quota.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ai-model-workspace
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "ai-model-workspace.labels" . | nindent 4 }}
+spec:
+  hard:
+    requests.storage: {{ .Values.quota.requestsStorage }}
+---
+{{- end }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.storage.pvcName }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "ai-model-workspace.labels" . | nindent 4 }}
+  {{- if eq .Values.storage.retentionPolicy "Keep" }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.storage.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size }}
+  storageClassName: {{ ternary .Values.storage.existingStorageClass .Values.storage.staticLocal.storageClassName (eq .Values.storage.mode "dynamic") }}
+  {{- if eq .Values.storage.mode "static-local" }}
+  volumeName: {{ .Values.storage.staticLocal.persistentVolumeName }}
+  {{- end }}
+{{- if .Values.validation.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ai-model-workspace-validation
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "ai-model-workspace.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.validation.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.validation.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "ai-model-workspace.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.validation.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.validation.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: validate
+          image: {{ .Values.validation.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ceu"]
+          args:
+            - |
+              marker=/workspace/.ai-model-workspace-validation
+              printf 'workspace-ready\n' >"${marker}"
+              sync
+              test "$(cat "${marker}")" = workspace-ready
+              stat "${marker}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: {{ .Values.storage.pvcName }}
+{{- end }}
+{{- end }}

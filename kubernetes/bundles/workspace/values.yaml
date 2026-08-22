@@ -1,0 +1,28 @@
+enabled: false
+namespace:
+  name: ai-workflows
+  create: true
+storage:
+  mode: dynamic
+  pvcName: ai-model-workspace
+  size: 100Gi
+  accessModes: [ReadWriteOnce]
+  existingStorageClass: ""
+  retentionPolicy: Keep
+  staticLocal:
+    storageClassName: ""
+    persistentVolumeName: ""
+    path: ""
+    nodeSelectorKey: kubernetes.io/hostname
+    nodeSelectorValue: ""
+    reclaimPolicy: Retain
+quota:
+  enabled: true
+  requestsStorage: 110Gi
+validation:
+  enabled: true
+  image: ""
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 604800
+  nodeSelector: {}
+  tolerations: []

@@ -1,0 +1,25 @@
+profile:
+  enabled: true
+gpu-operator:
+  enabled: true
+  psa:
+    enabled: true
+  cdi:
+    enabled: true
+    nriPluginEnabled: false
+  driver:
+    enabled: true
+    kernelModuleType: auto
+    usePrecompiled: false
+    upgradePolicy:
+      autoUpgrade: false
+  toolkit:
+    enabled: true
+  nfd:
+    enabled: true
+  dcgmExporter:
+    enabled: true
+  migManager:
+    enabled: false
+readiness:
+  enabled: true

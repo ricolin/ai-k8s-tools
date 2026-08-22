@@ -5,6 +5,9 @@ metadata:
   name: ai-workflows
   labels:
     ai-build-tools.ricolin.dev/workload: model-release
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -1,0 +1,51 @@
+profile:
+  enabled: false
+
+gpu-operator:
+  enabled: false
+  psa:
+    enabled: true
+  cdi:
+    enabled: true
+    nriPluginEnabled: false
+  driver:
+    enabled: true
+    kernelModuleType: auto
+    usePrecompiled: false
+    upgradePolicy:
+      autoUpgrade: false
+  toolkit:
+    enabled: true
+  nfd:
+    enabled: true
+  dcgmExporter:
+    enabled: true
+  migManager:
+    enabled: false
+
+readiness:
+  enabled: false
+  orchestratorImage: ""
+  cudaSmokeImage: ""
+  imagePullPolicy: IfNotPresent
+  operatorNamespace: gpu-operator
+  clusterPolicyName: cluster-policy
+  devicePluginDaemonSet: nvidia-device-plugin-daemonset
+  expectedGpuNodes: 1
+  expectedGpuCountPerNode: 1
+  fullNodeGpuCount: 1
+  evidenceConfigMap: nvidia-ai-readiness-evidence
+  stageTimeoutSeconds: 1200
+  pollIntervalSeconds: 10
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 604800
+  backoffLimit: 0
+  nodeSelector: {}
+  tolerations: []
+  imagePullSecrets: []
+
+compatibility:
+  minimumKubernetesMinor: 28
+  requireLinuxNodes: true
+  requireAmd64Nodes: true
+  allowPreinstalledDriverFallback: false

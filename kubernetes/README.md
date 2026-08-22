@@ -10,6 +10,8 @@ same immutable-input and release-evidence principles.
 
 ```text
 kubernetes/
+├── addons/                    # Opt-in cluster lifecycle add-ons
+├── bundles/                   # Versioned storage and AI platform bundles
 ├── profiles/                  # Environment-specific scheduling and evidence
 ├── platform/                  # Kubeflow, Hub, KServe and storage installation
 ├── workflows/                 # KFP DSL, workflow tools and unit tests
@@ -43,6 +45,12 @@ See [the full workflow and operations guide](../docs/kubernetes-workflow.md).
 Physical CUDA integration remains a separate gated workstream; its detailed
 plan and reusable H200 validation templates are in
 [kubernetes-CUDA](../kubernetes-CUDA/README.md).
+
+The [NVIDIA-ready cluster lifecycle](../docs/nvidia-ai-ready-cluster.md)
+documents the disabled-by-default GPU Operator/CUDA readiness add-on, retained
+workspace chart, and separately managed Kubeflow/KServe bundle. Existing
+cluster templates do not use these resources unless they explicitly select a
+reviewed add-on profile.
 
 The released-adviser and reports-only agent path is documented in
 [the grounded security-agent guide](../docs/security-agent-workflow.md), with

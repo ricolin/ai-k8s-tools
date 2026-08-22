@@ -1,6 +1,6 @@
 # AI Kubernetes Tools
 
-Private development repository for reusable Kubernetes AI workflows. It keeps
+Public, reusable Kubernetes AI workflow tooling. It keeps
 Kubeflow, KServe, CUDA, H200, model-training, serving, and bounded security
 research work separate from the standalone bare-metal workflow in
 `ricolin/ai-build-tools`.
@@ -34,6 +34,11 @@ kubernetes-CUDA/       Physical CUDA training and validation backends
 scripts/                Shared GPU runtime bootstrap helper
 ```
 
+Cluster lifecycle add-ons are opt-in and render no resources by default. The
+NVIDIA readiness profile checks Kubernetes/Linux/architecture compatibility at
+runtime, and clusters that do not select the profile retain their existing
+guest-image and Kubernetes-tag behavior.
+
 Start with:
 
 - [Kubernetes workflow](docs/kubernetes-workflow.md)
@@ -43,6 +48,7 @@ Start with:
 - [Troubleshooting](docs/troubleshooting.md)
 - [Kubernetes tools](kubernetes/README.md)
 - [CUDA and H200 validation](kubernetes-CUDA/README.md)
+- [NVIDIA-ready cluster lifecycle](docs/nvidia-ai-ready-cluster.md)
 - [SDXL CUDA backend](kubernetes-CUDA/image/README.md)
 - [Security adviser CUDA backend](kubernetes-CUDA/security/README.md)
 
@@ -69,6 +75,10 @@ python3 -m py_compile \
 
 ./kubernetes/tools/verify-security-research-implementation.sh \
   /tmp/ai-k8s-tools-local-evidence
+
+./kubernetes/addons/nvidia-ai-readiness/test-render.sh
+./kubernetes/bundles/workspace/test-render.sh
+./kubernetes/bundles/kubeflow-kserve/test-contract.sh
 ```
 
 The final verifier proves local contracts and a synthetic fixture only. It

@@ -1,0 +1,96 @@
+{{- if and .Values.profile.enabled .Values.readiness.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nvidia-ai-readiness.fullname" . }}
+  labels:
+    {{- include "nvidia-ai-readiness.labels" . | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.readiness.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.readiness.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.readiness.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "nvidia-ai-readiness.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "nvidia-ai-readiness.fullname" . }}
+      automountServiceAccountToken: true
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.readiness.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.readiness.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.readiness.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: orchestrator
+          image: {{ .Values.readiness.orchestratorImage | quote }}
+          imagePullPolicy: {{ .Values.readiness.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: TARGET_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OPERATOR_NAMESPACE
+              value: {{ .Values.readiness.operatorNamespace | quote }}
+            - name: CLUSTER_POLICY_NAME
+              value: {{ .Values.readiness.clusterPolicyName | quote }}
+            - name: DEVICE_PLUGIN_DAEMONSET
+              value: {{ .Values.readiness.devicePluginDaemonSet | quote }}
+            - name: EXPECTED_GPU_NODES
+              value: {{ .Values.readiness.expectedGpuNodes | quote }}
+            - name: EXPECTED_GPU_COUNT_PER_NODE
+              value: {{ .Values.readiness.expectedGpuCountPerNode | quote }}
+            - name: FULL_NODE_GPU_COUNT
+              value: {{ .Values.readiness.fullNodeGpuCount | quote }}
+            - name: CUDA_SMOKE_IMAGE
+              value: {{ .Values.readiness.cudaSmokeImage | quote }}
+            - name: ORCHESTRATOR_IMAGE_ID
+              value: {{ .Values.readiness.orchestratorImage | quote }}
+            - name: EVIDENCE_CONFIGMAP
+              value: {{ .Values.readiness.evidenceConfigMap | quote }}
+            - name: STAGE_TIMEOUT_SECONDS
+              value: {{ .Values.readiness.stageTimeoutSeconds | quote }}
+            - name: POLL_INTERVAL_SECONDS
+              value: {{ .Values.readiness.pollIntervalSeconds | quote }}
+            - name: MINIMUM_KUBERNETES_MINOR
+              value: {{ .Values.compatibility.minimumKubernetesMinor | quote }}
+            - name: REQUIRE_LINUX_NODES
+              value: {{ .Values.compatibility.requireLinuxNodes | quote }}
+            - name: REQUIRE_AMD64_NODES
+              value: {{ .Values.compatibility.requireAmd64Nodes | quote }}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}
