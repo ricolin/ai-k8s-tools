@@ -133,6 +133,11 @@ def test_request_distinguishes_finding_and_evidence_ids() -> None:
             "fix-until-green",
             ["bash", "go", "python", "rust", "yaml"],
         ),
+        (
+            "go review https://github.com/ricolin/ai-build-tools/ on the bash scripts and provide fix until all your review green",
+            "fix-until-green",
+            ["bash"],
+        ),
     ],
 )
 def test_parse_intent_supports_simple_review_commands(text: str, mode: str, languages: list[str]) -> None:
