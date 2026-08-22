@@ -16,6 +16,7 @@ it requires a separately accepted guest image and explicit values.
 Build the locked dependency and provide content-addressed readiness images:
 
 ```bash
+helm repo add nvidia https://helm.ngc.nvidia.com/nvidia
 helm dependency build kubernetes/addons/nvidia-ai-readiness
 helm template nvidia-ai-h200 \
   kubernetes/addons/nvidia-ai-readiness \

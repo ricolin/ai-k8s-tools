@@ -5,7 +5,9 @@ chart_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 temporary=$(mktemp -d /tmp/nvidia-ai-readiness-render.XXXXXX)
 trap 'rm -rf "${temporary}"' EXIT
 
-helm dependency build "${chart_dir}" >/dev/null
+printf '%s  %s\n' \
+  6d1b282d74288be206c66dfe49073b7c85c209e92826c27f6507429055e2e102 \
+  "${chart_dir}/charts/gpu-operator-v26.7.0.tgz" | sha256sum --check >/dev/null
 helm lint "${chart_dir}" >/dev/null
 helm template inactive "${chart_dir}" --namespace gpu-operator \
   >"${temporary}/inactive.yaml"
