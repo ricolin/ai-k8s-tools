@@ -141,13 +141,15 @@ Evaluate the final gate with:
 
 ```bash
 kubernetes/tools/ai-workflow code-agent evaluate-green \
+  --release code-review-release.json \
+  --packet final-review-packet.json \
   --response final-response.json \
   --result-env results/result.env \
   --output green-gate.json
 jq -e '.status == "GREEN"' green-gate.json
 ```
 
-`GREEN` requires `UNIT_TEST_STATUS=0`, a recorded 40-character source commit,
+`GREEN` requires `UNIT_TEST_STATUS=0`, an exact source-lock commit match,
 final verdict `APPROVE` or `COMMENT`, zero remaining findings, and no further
 candidate fix. The selected profile defines what passed; do not describe a
 focused profile as the full repository suite.

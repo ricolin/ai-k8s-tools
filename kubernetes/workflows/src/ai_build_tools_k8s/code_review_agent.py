@@ -75,6 +75,17 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, set[str]]:
         require(all(isinstance(value, str) and value for value in values), f"invalid {field}")
         require(len(values) == len(set(values)), f"duplicate {field}")
         result[field] = set(values)
+    evidence = packet.get("evidence")
+    if evidence is not None:
+        require(isinstance(evidence, list), "evidence must be a list")
+        evidence_ids: list[str] = []
+        for item in evidence:
+            require(isinstance(item, dict), "evidence entries must be objects")
+            identifier = item.get("id")
+            require(isinstance(identifier, str) and identifier, "evidence id is required")
+            evidence_ids.append(identifier)
+        require(len(evidence_ids) == len(set(evidence_ids)), "duplicate evidence id")
+        require(set(evidence_ids) == result["evidence_ids"], "evidence index does not match evidence objects")
     return result
 
 
@@ -199,6 +210,22 @@ def git_output(checkout: Path, *args: str) -> str:
     return completed.stdout.strip()
 
 
+def read_utf8_prefix(path: Path, byte_limit: int) -> tuple[str, bool]:
+    with path.open("rb") as stream:
+        sample = stream.read(byte_limit + 1)
+    truncated = len(sample) > byte_limit
+    bounded = sample[:byte_limit]
+    while bounded:
+        try:
+            return bounded.decode("utf-8"), truncated or len(bounded) < len(sample)
+        except UnicodeDecodeError as error:
+            if error.reason != "unexpected end of data" or error.end != len(bounded):
+                return "", truncated
+            bounded = bounded[:error.start]
+            truncated = True
+    return "", truncated
+
+
 def collect_packet(
     intent: dict[str, Any],
     source_lock: dict[str, Any],
@@ -238,13 +265,8 @@ def collect_packet(
         path = checkout / relative
         if not path.is_file() or path.is_symlink() or path.suffix.lower() not in suffixes:
             continue
-        raw = path.read_bytes()[:max_file_bytes]
-        try:
-            content = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            continue
         remaining = max_total_bytes - total
-        content = content[:remaining]
+        content, truncated = read_utf8_prefix(path, min(max_file_bytes, remaining))
         if not content.strip():
             continue
         identifier = f"{lock_id}:source-{len(evidence) + 1:02d}"
@@ -255,7 +277,7 @@ def collect_packet(
                 "path": Path(relative).as_posix(),
                 "line_start": 1,
                 "content": content,
-                "truncated": path.stat().st_size > len(raw) or len(content.encode()) < len(raw),
+                "truncated": truncated,
             }
         )
         total += len(content.encode())
@@ -313,6 +335,7 @@ def create_followup_packet(
     require(values.get("SOURCE_COMMIT") == source_commit, "sandbox source commit differs from the packet")
     status = values.get("UNIT_TEST_STATUS")
     require(status is not None and status.isdigit(), "sandbox unit-test status is invalid")
+    require(0 <= int(status) <= 255, "sandbox unit-test status is out of range")
     require(len(test_log.encode()) <= 64 * 1024, "test log exceeds 64 KiB")
     require(bool(test_log.strip()), "test log is empty")
     require(len(patch.encode()) <= 256 * 1024, "observed patch exceeds 256 KiB")
@@ -362,7 +385,13 @@ def create_followup_packet(
     return result
 
 
-def evaluate_green(response: dict[str, Any], result_env: str) -> dict[str, Any]:
+def evaluate_green(
+    response: dict[str, Any],
+    result_env: str,
+    release: dict[str, Any],
+    packet: dict[str, Any],
+) -> dict[str, Any]:
+    validate_response(response, release, packet)
     values = dict(
         line.split("=", 1)
         for line in result_env.splitlines()
@@ -370,9 +399,13 @@ def evaluate_green(response: dict[str, Any], result_env: str) -> dict[str, Any]:
     )
     review = response.get("review", {})
     fix = response.get("candidate_fix", {})
+    source_commit = str(packet.get("source", {}).get("commit", ""))
     checks = {
         "unit_test_status_zero": values.get("UNIT_TEST_STATUS") == "0",
-        "source_commit_recorded": bool(re.fullmatch(r"[0-9a-f]{40}", values.get("SOURCE_COMMIT", ""))),
+        "source_commit_matches_lock": (
+            bool(re.fullmatch(r"[0-9a-f]{40}", source_commit))
+            and values.get("SOURCE_COMMIT") == source_commit
+        ),
         "final_verdict_green": review.get("verdict") in {"APPROVE", "COMMENT"},
         "remaining_findings_zero": review.get("findings") == [],
         "no_additional_fix_requested": fix.get("status") == "NOT_NEEDED",
@@ -532,6 +565,8 @@ def build_parser() -> argparse.ArgumentParser:
     intent.add_argument("--output", required=True)
 
     gate = commands.add_parser("evaluate-green")
+    gate.add_argument("--release", required=True)
+    gate.add_argument("--packet", required=True)
     gate.add_argument("--response", required=True)
     gate.add_argument("--result-env", required=True)
     gate.add_argument("--output", required=True)
@@ -577,7 +612,12 @@ def main() -> None:
         elif args.command == "evaluate-green":
             write_json(
                 Path(args.output),
-                evaluate_green(load_json(Path(args.response)), Path(args.result_env).read_text()),
+                evaluate_green(
+                    load_json(Path(args.response)),
+                    Path(args.result_env).read_text(),
+                    load_json(Path(args.release)),
+                    load_json(Path(args.packet)),
+                ),
             )
         elif args.command == "collect-packet":
             write_json(

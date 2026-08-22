@@ -105,6 +105,36 @@ def response() -> dict:
     }
 
 
+def green_response() -> dict:
+    value = response()
+    value["review"]["verdict"] = "APPROVE"
+    value["review"]["findings"] = []
+    value["candidate_fix"] = {
+        "status": "NOT_NEEDED",
+        "patch_id": None,
+        "unified_diff": "",
+        "rationale": "No remaining findings",
+        "expected_tests": [],
+    }
+    value["execution_plan"]["tasks"] = [
+        {
+            "id": "collect",
+            "tool": "collect_test_results",
+            "arguments": {"evidence_ids": ["diff-1"]},
+            "timeout_seconds": 60,
+            "cleanup_required": True,
+        },
+        {
+            "id": "review",
+            "tool": "draft_review",
+            "arguments": {"evidence_ids": ["diff-1"]},
+            "timeout_seconds": 60,
+            "cleanup_required": True,
+        },
+    ]
+    return value
+
+
 def test_response_accepts_bounded_patch_and_profile() -> None:
     assert validate_response(response(), release(), packet()) == response()
 
@@ -175,18 +205,16 @@ def test_parse_intent_rejects_unsupported_target() -> None:
 
 
 def test_evaluate_green_requires_tests_and_clean_final_review() -> None:
-    final = response()
-    final["review"]["verdict"] = "APPROVE"
-    final["review"]["findings"] = []
-    final["candidate_fix"] = {
-        "status": "NOT_NEEDED",
-        "patch_id": None,
-        "unified_diff": "",
-        "rationale": "No remaining findings",
-        "expected_tests": ["python-unit"],
-    }
+    final = green_response()
 
-    result = evaluate_green(final, "UNIT_TEST_STATUS=0\nSOURCE_COMMIT=" + ("a" * 40) + "\n")
+    value = packet()
+    value["source"] = {"commit": "a" * 40}
+    result = evaluate_green(
+        final,
+        "UNIT_TEST_STATUS=0\nSOURCE_COMMIT=" + ("a" * 40) + "\n",
+        release(),
+        value,
+    )
 
     assert result["status"] == "GREEN"
     assert all(result["checks"].values())
@@ -286,3 +314,69 @@ def test_collect_packet_locks_clean_checkout_and_language_scope(tmp_path: Path) 
     (checkout / "scripts/check.sh").write_text("dirty\n")
     with pytest.raises(ContractError, match="checkout must be clean"):
         collect_packet(intent, source_lock, release(), "bash-unit", checkout)
+
+
+def test_collect_packet_preserves_utf8_byte_limits(tmp_path: Path) -> None:
+    checkout = tmp_path / "source"
+    checkout.mkdir()
+    (checkout / "example.py").write_text("value = '" + ("水" * 200) + "'\n")
+    subprocess.run(["git", "init", str(checkout)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(checkout), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git", "-C", str(checkout), "-c", "user.name=Test", "-c",
+            "user.email=test@example.com", "commit", "-m", "fixture",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    commit = subprocess.run(
+        ["git", "-C", str(checkout), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    intent = parse_intent("go review https://github.com/ricolin/ai-build-tools/ on the python files")
+    source_lock = {
+        "id": f"repo-{commit[:12]}",
+        "repository": intent["repository"],
+        "commit": commit,
+    }
+
+    result = collect_packet(
+        intent,
+        source_lock,
+        release(),
+        "python-unit",
+        checkout,
+        max_file_bytes=256,
+        max_total_bytes=256,
+    )
+
+    assert result["source"]["content_bytes"] <= 256
+    assert result["evidence"][0]["truncated"] is True
+    assert result["evidence"][0]["content"].encode("utf-8").decode("utf-8")
+
+
+def test_green_gate_rejects_mismatched_source_lock() -> None:
+    final = green_response()
+    value = packet()
+    value["source"] = {"commit": "a" * 40}
+
+    result = evaluate_green(
+        final,
+        "UNIT_TEST_STATUS=0\nSOURCE_COMMIT=" + ("b" * 40) + "\n",
+        release(),
+        value,
+    )
+
+    assert result["status"] == "CONTINUE"
+    assert result["checks"]["source_commit_matches_lock"] is False
+
+
+def test_packet_rejects_evidence_index_drift() -> None:
+    value = packet()
+    value["evidence"] = [{"id": "different-evidence"}]
+
+    with pytest.raises(ContractError, match="evidence index does not match"):
+        make_request(release(), value)
