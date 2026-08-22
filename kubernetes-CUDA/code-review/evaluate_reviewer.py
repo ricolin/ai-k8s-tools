@@ -56,6 +56,7 @@ def load_config(path: Path) -> dict[str, Any]:
     require(Path(config["prompts_path"]).is_absolute(), "prompts path must be absolute")
     require(Path(config["output_dir"]).is_absolute(), "output path must be absolute")
     require(1 <= int(config.get("max_new_tokens", 0)) <= 4096, "max_new_tokens is invalid")
+    require(config.get("response_prefix", "") in {"", "{"}, "unsupported response prefix")
     return config
 
 
@@ -69,6 +70,7 @@ def evaluate(config_path: Path) -> None:
     prompts = json.loads(prompts_path.read_text())
     require(isinstance(prompts, list) and len(prompts) >= 6, "comparison prompts are incomplete")
     output.mkdir(parents=True, exist_ok=False)
+    response_prefix = str(config.get("response_prefix", ""))
 
     import torch
     from peft import PeftModel
@@ -100,6 +102,7 @@ def evaluate(config_path: Path) -> None:
                 add_generation_prompt=True,
                 enable_thinking=False,
             )
+            rendered += response_prefix
             inputs = tokenizer(rendered, return_tensors="pt").to("cuda:0")
             with torch.inference_mode():
                 generated = model.generate(
@@ -108,7 +111,10 @@ def evaluate(config_path: Path) -> None:
                     max_new_tokens=int(config["max_new_tokens"]),
                     pad_token_id=tokenizer.eos_token_id,
                 )
-            response = tokenizer.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+            response = response_prefix + tokenizer.decode(
+                generated[0, inputs["input_ids"].shape[1] :],
+                skip_special_tokens=True,
+            )
             _, errors = validate_response_text(response)
             records.append(
                 {

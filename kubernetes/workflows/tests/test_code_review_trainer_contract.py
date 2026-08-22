@@ -132,6 +132,14 @@ def test_code_review_image_uses_only_the_neutral_training_runtime() -> None:
     assert "generate_agent_response.py" not in dockerfile
 
 
+def test_code_review_runtime_supports_explicit_json_prefill() -> None:
+    runtime = (ROOT / "kubernetes-CUDA/common/serve_text_adapter.py").read_text()
+    evaluator = (ROOT / "kubernetes-CUDA/code-review/evaluate_reviewer.py").read_text()
+
+    assert 'response_prefix in {"", "{"}' in runtime
+    assert 'config.get("response_prefix", "") in {"", "{"}' in evaluator
+
+
 def test_neutral_training_runtime_keeps_the_release_chain_contract(tmp_path: Path) -> None:
     for name in ("foundation", "tokenizer", "dataset", "parent"):
         (tmp_path / name).mkdir()

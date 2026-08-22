@@ -333,6 +333,7 @@ def render_node_local_serving(
                     "--adapter-digest", release["adapter_digest"],
                     "--model-name", release["serving_model_name"],
                     "--max-new-tokens", "2048",
+                    "--response-prefix", "{",
                     "--port", "8000",
                 ],
                 "env": [

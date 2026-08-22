@@ -179,6 +179,7 @@ def test_node_local_serving_uses_the_verified_adapter_runtime() -> None:
     ]
     assert container["args"][container["args"].index("--foundation-digest") + 1] == digest("a")
     assert container["args"][container["args"].index("--adapter-digest") + 1] == digest("b")
+    assert container["args"][container["args"].index("--response-prefix") + 1] == "{"
     assert container["imagePullPolicy"] == "Never"
     assert predictor["securityContext"]["seccompProfile"] == {"type": "RuntimeDefault"}
     assert predictor["tolerations"][0]["key"] == "node-role.kubernetes.io/control-plane"

@@ -75,12 +75,14 @@ class TextAdapterServer:
         adapter_digest: str,
         model_name: str,
         max_new_tokens: int,
+        response_prefix: str = "",
     ) -> None:
         require(foundation.is_dir(), "foundation is missing")
         require(adapter.is_dir(), "adapter is missing")
         require(f"sha256:{sha256_tree(foundation)}" == foundation_digest, "foundation digest mismatch")
         require(f"sha256:{sha256_tree(adapter)}" == adapter_digest, "adapter digest mismatch")
         require(1 <= max_new_tokens <= 4096, "max_new_tokens is invalid")
+        require(response_prefix in {"", "{"}, "unsupported response prefix")
 
         import torch
         from peft import PeftModel
@@ -107,6 +109,7 @@ class TextAdapterServer:
         self.adapter_digest = adapter_digest
         self.model_name = model_name
         self.max_new_tokens = max_new_tokens
+        self.response_prefix = response_prefix
         self.lock = threading.Lock()
 
     def generate(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -117,6 +120,7 @@ class TextAdapterServer:
             add_generation_prompt=True,
             enable_thinking=False,
         )
+        rendered += self.response_prefix
         inputs = self.tokenizer(rendered, return_tensors="pt").to("cuda:0")
         with self.lock, self.torch.inference_mode():
             generated = self.model.generate(
@@ -126,7 +130,7 @@ class TextAdapterServer:
                 pad_token_id=self.tokenizer.eos_token_id,
             )
         generated_tokens = generated[0, inputs["input_ids"].shape[1] :]
-        content = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        content = self.response_prefix + self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
         parsed = json.loads(content)
         require(isinstance(parsed, dict), "generated response must be one JSON object")
         compact = canonical_json(parsed).decode()
@@ -195,6 +199,7 @@ def main() -> None:
     parser.add_argument("--adapter-digest", required=True)
     parser.add_argument("--model-name", default="text-adapter-c")
     parser.add_argument("--max-new-tokens", type=int, default=1536)
+    parser.add_argument("--response-prefix", default="")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     server = TextAdapterServer(
@@ -204,10 +209,10 @@ def main() -> None:
         args.adapter_digest,
         args.model_name,
         args.max_new_tokens,
+        args.response_prefix,
     )
     ThreadingHTTPServer(("0.0.0.0", args.port), handler_factory(server)).serve_forever()
 
 
 if __name__ == "__main__":
     main()
-
