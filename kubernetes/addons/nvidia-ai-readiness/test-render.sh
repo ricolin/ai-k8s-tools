@@ -18,8 +18,8 @@ import sys
 import yaml
 
 lock = yaml.safe_load(open(sys.argv[1]))
-assert lock["sourceCommit"] == "addbd49e713732e7f2c804b33d96e71dfb93637c"
-assert lock["workflowRun"].endswith("/32563606260")
+assert lock["sourceCommit"] == "689752cd7b7b933af0417acf193a71c8ced89992"
+assert lock["workflowRun"].endswith("/32588300301")
 for artifact in lock["artifacts"].values():
     assert re.fullmatch(r"sha256:[0-9a-f]{64}", artifact["digest"])
 PY
