@@ -98,8 +98,9 @@ def patch_test_script(commands: list[list[str]], patch_present: bool) -> str:
     lines.extend(["status=0", ": > /workspace/results/unit-tests.log"])
     for command in commands:
         rendered = " ".join(shell_quote(argument) for argument in command)
-        lines.append(f"{rendered} 2>&1 | tee -a /workspace/results/unit-tests.log || status=$?")
-        lines.append("test \"${status}\" -eq 0 || break")
+        lines.append("if [ \"${status}\" -eq 0 ]; then")
+        lines.append(f"  {rendered} 2>&1 | tee -a /workspace/results/unit-tests.log || status=$?")
+        lines.append("fi")
     lines.extend(
         [
             "git diff --no-ext-diff --src-prefix=a/ --dst-prefix=b/ > /workspace/results/fix.patch",
