@@ -131,7 +131,8 @@ spec:
           command: ["/bin/sh", "-ceu"]
           args:
             - |
-              marker=/workspace/.ai-model-workspace-validation
+              marker=$(mktemp /workspace/.ai-model-workspace-validation.XXXXXX)
+              trap 'rm -f "${marker}"' EXIT
               printf 'workspace-ready\n' >"${marker}"
               sync
               test "$(cat "${marker}")" = workspace-ready
