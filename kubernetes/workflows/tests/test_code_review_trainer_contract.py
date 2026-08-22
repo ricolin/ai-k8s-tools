@@ -88,6 +88,12 @@ def test_comparison_prompts_match_live_request_shape() -> None:
     assert payload["contract"]["identifier_rules"]["finding.evidence"].startswith("exact value")
 
 
+def test_checked_in_comparison_prompts_match_generator() -> None:
+    checked_in = json.loads((ROOT / "kubernetes/code-review/comparison-prompts.json").read_text())
+
+    assert checked_in == generator.comparison_prompts()
+
+
 def test_release_c_covers_repository_and_pull_request_inputs() -> None:
     repository = json.loads(generator.record("C", 0)["messages"][1]["content"])
     pull_request = json.loads(generator.record("C", 1)["messages"][1]["content"])
