@@ -222,7 +222,13 @@ def render_training_job(
     pod_spec: dict[str, Any] = {
         "restartPolicy": "Never",
         "automountServiceAccountToken": False,
-        "securityContext": {"seccompProfile": {"type": "RuntimeDefault"}},
+        "securityContext": {
+            "runAsNonRoot": True,
+            "runAsUser": 65532,
+            "runAsGroup": 65532,
+            "fsGroup": 65532,
+            "seccompProfile": {"type": "RuntimeDefault"},
+        },
         "containers": [
             {
                 "name": "trainer",
@@ -249,6 +255,9 @@ def render_training_job(
                 "securityContext": {
                     "allowPrivilegeEscalation": False,
                     "capabilities": {"drop": ["ALL"]},
+                    "runAsNonRoot": True,
+                    "runAsUser": 65532,
+                    "runAsGroup": 65532,
                 },
                 "volumeMounts": [
                     {"name": "workspace", "mountPath": "/workspace"},
@@ -304,6 +313,13 @@ def render_node_local_serving(
         "automountServiceAccountToken": False,
         "minReplicas": 1,
         "maxReplicas": 1,
+        "securityContext": {
+            "runAsNonRoot": True,
+            "runAsUser": 65532,
+            "runAsGroup": 65532,
+            "fsGroup": 65532,
+            "seccompProfile": {"type": "RuntimeDefault"},
+        },
         "containers": [
             {
                 "name": "kserve-container",

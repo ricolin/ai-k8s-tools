@@ -106,6 +106,8 @@ def test_training_job_uses_code_review_entrypoint() -> None:
     container = value["spec"]["template"]["spec"]["containers"][0]
     assert "/opt/ai-code-review/trainer.py" in container["args"]
     assert container["resources"]["limits"]["nvidia.com/gpu"] == 8
+    assert container["securityContext"]["runAsUser"] == 65532
+    assert value["spec"]["template"]["spec"]["securityContext"]["runAsNonRoot"] is True
     assert "tolerations" not in value["spec"]["template"]["spec"]
 
 
@@ -176,5 +178,6 @@ def test_node_local_serving_uses_the_verified_adapter_runtime() -> None:
     assert container["args"][container["args"].index("--foundation-digest") + 1] == digest("a")
     assert container["args"][container["args"].index("--adapter-digest") + 1] == digest("b")
     assert container["imagePullPolicy"] == "Never"
+    assert predictor["securityContext"]["seccompProfile"] == {"type": "RuntimeDefault"}
     assert predictor["tolerations"][0]["key"] == "node-role.kubernetes.io/control-plane"
     assert value["metadata"]["annotations"]["ai-k8s-tools.ricolin.dev/node-local-image-id"] == digest("9")
