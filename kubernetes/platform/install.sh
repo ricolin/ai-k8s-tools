@@ -245,12 +245,13 @@ for attempt in 1 2 3; do
     clusterservingruntimes.serving.kserve.io; do
     ${kubectl} wait --for=condition=Established "crd/${crd}" --timeout=120s
   done
-  ${kubectl} wait -n kubeflow --for=condition=Available \
+  ${kubectl} -n kubeflow rollout status \
     deployment/kserve-controller-manager --timeout=600s
   sleep 5
 done
 ${kubectl} wait --for=condition=Established crd/inferenceservices.serving.kserve.io --timeout=120s
-${kubectl} wait -n kubeflow --for=condition=Available deployment/kserve-controller-manager --timeout=600s
+${kubectl} -n kubeflow rollout status \
+  deployment/kserve-controller-manager --timeout=600s
 
 ${kubectl} apply -f "${root_dir}/kubernetes/manifests/workflow-integration.yaml"
 access_key=$(${kubectl} -n kubeflow get secret mlpipeline-minio-artifact -o jsonpath='{.data.accesskey}' | base64 -d)

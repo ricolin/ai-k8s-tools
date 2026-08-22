@@ -198,6 +198,13 @@ def test_platform_tool_downloads_are_versioned_and_checksum_pinned() -> None:
         assert re.search(rf"^{variable}=[a-f0-9]{{64}}$", versions, flags=re.MULTILINE)
 
 
+def test_kserve_install_waits_for_a_new_deployment_rollout() -> None:
+    installer = (Path(__file__).parents[2] / "platform" / "install.sh").read_text()
+    assert installer.count("deployment/kserve-controller-manager --timeout=600s") == 2
+    assert installer.count("kubeflow rollout status") >= 2
+    assert "--for=condition=Available deployment/kserve-controller-manager" not in installer
+
+
 def test_runtime_health_and_prediction(tmp_path: Path) -> None:
     base = tmp_path / "base"
     adapter = tmp_path / "adapter"
