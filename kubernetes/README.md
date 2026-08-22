@@ -62,3 +62,21 @@ kubectl apply --dry-run=server -f /path/to/rendered.yaml
 Use both gates. The repository validator gives a focused error for accidental
 empty image variables; the API server dry run validates the complete resource
 against the target cluster.
+
+## Pinned operator runtime
+
+`kubernetes/tools/ai-workflow` requires the repository-pinned `uv` runtime. On
+an operator host without `uv`, install it atomically and retain the downloaded
+archive checksum with the run evidence:
+
+```bash
+sudo ./kubernetes/tools/install-uv.sh \
+  /path/to/run-evidence/source/tools \
+  /opt/ai-build-tools-bin/uv
+export UV_BIN=/opt/ai-build-tools-bin/uv
+"${UV_BIN}" --version
+```
+
+Persist `UV_BIN` in the run ledger. The workflow wrapper also discovers the
+standard `/opt/ai-build-tools-bin/uv` path, but an explicit exported value
+makes resumed shells reproducible.

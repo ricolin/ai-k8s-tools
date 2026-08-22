@@ -73,9 +73,11 @@ set both parent fields and include replay stages explicitly:
 }
 ```
 
-C normally uses `["A", "B", "C"]`. Dataset weighting must already be
-resolved into the immutable JSONL epoch plan; the trainer does not invent or
-silently alter replay ratios.
+C uses `["C"]` when its parent adapter is the accepted B artifact because that
+parent already carries the A and B specialization. Use `["A", "B", "C"]`
+only when the immutable C dataset intentionally contains an explicit replay
+mixture. Dataset weighting must already be resolved into the immutable JSONL
+epoch plan; the trainer does not invent or silently alter replay ratios.
 
 ## Render the eight-GPU Job
 
@@ -94,6 +96,14 @@ silently alter replay ratios.
 
 Apply only after `kubectl apply --dry-run=server` accepts the manifest and all
 eight GPUs are allocatable.
+
+Before promotion, comparison may enable
+`normalize_redundant_contract_fields: true`. This guard is deliberately
+lossless and fail-closed: it collapses only identical duplicate JSON keys and
+removes a nested field only when its value is identical to the required
+top-level value. Conflicting or non-redundant content remains rejected. The
+evaluator preserves every raw generation in `response-attempts.jsonl` and
+records each normalization action in the final response record.
 
 ## Serve accepted C
 

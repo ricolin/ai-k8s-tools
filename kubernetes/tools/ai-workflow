@@ -3,10 +3,16 @@ set -euo pipefail
 
 root_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 workflow_root="${root_dir}/kubernetes/workflows"
-uv_bin=${UV_BIN:-uv}
+if [[ -n ${UV_BIN:-} ]]; then
+  uv_bin=${UV_BIN}
+elif command -v uv >/dev/null 2>&1; then
+  uv_bin=uv
+else
+  uv_bin=/opt/ai-build-tools-bin/uv
+fi
 
 command -v "${uv_bin}" >/dev/null 2>&1 || {
-  echo "BLOCKED: uv is required" >&2
+  echo "BLOCKED: uv is required; run kubernetes/tools/install-uv.sh and export UV_BIN" >&2
   exit 1
 }
 

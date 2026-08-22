@@ -189,6 +189,7 @@ def test_evaluator_requires_exact_foundation_a_b_c_order(tmp_path: Path) -> None
                 "prompts_path": "/workspace/prompts.json",
                 "output_dir": "/workspace/output",
                 "max_new_tokens": 64,
+                "normalize_redundant_contract_fields": True,
                 "stages": [
                     {"name": "foundation", "adapter_path": None, "adapter_digest": None},
                     {"name": "A", "adapter_path": "/workspace/a", "adapter_digest": digest("b")},
@@ -198,7 +199,72 @@ def test_evaluator_requires_exact_foundation_a_b_c_order(tmp_path: Path) -> None
             }
         )
     )
-    assert [item["name"] for item in evaluator.load_config(config_path)["stages"]] == ["foundation", "A", "B", "C"]
+    config = evaluator.load_config(config_path)
+    assert [item["name"] for item in config["stages"]] == ["foundation", "A", "B", "C"]
+    assert config["normalize_redundant_contract_fields"] is True
+
+    value = __import__("json").loads(config_path.read_text())
+    value["normalize_redundant_contract_fields"] = "true"
+    config_path.write_text(__import__("json").dumps(value))
+    with pytest.raises(ValueError, match="must be a boolean"):
+        evaluator.load_config(config_path)
+
+
+def test_evaluator_canonical_guard_keeps_prohibited_inferences_top_level() -> None:
+    valid = {
+        "schema_version": "1.0.0",
+        "evidence_ids": ["fixture"],
+        "proof_status": "SUPPORTED",
+        "observations": ["observed"],
+        "unknowns": ["unknown"],
+        "risks": ["risk"],
+        "remediation": ["remediate"],
+        "validation": {
+            "allowed_steps": ["read"],
+            "negative_predicate": "no write",
+            "timeout_seconds": 30,
+            "stop_conditions": ["timeout"],
+            "cleanup": ["none"],
+        },
+        "prohibited_inferences": ["impact"],
+    }
+    assert evaluator.contract_errors(__import__("json").dumps(valid)) == []
+    valid["validation"]["prohibited_inferences"] = ["impact"]
+    errors = evaluator.contract_errors(__import__("json").dumps(valid))
+    assert errors == ["validation fields do not match the advisory contract"]
+
+    valid["validation"]["prohibited_inferences"] = valid["prohibited_inferences"]
+    malformed = __import__("json").dumps(valid)
+    normalized, actions = evaluator.normalize_advisory(malformed)
+    assert evaluator.contract_errors(normalized) == []
+    assert actions == ["removed-redundant-validation-field:prohibited_inferences"]
+
+
+def test_evaluator_normalizer_rejects_conflicting_duplicate_keys() -> None:
+    response = '{"schema_version":"1.0.0","schema_version":"2.0.0","validation":{}}'
+    with pytest.raises(ValueError, match="conflicting duplicate JSON key"):
+        evaluator.normalize_advisory(response)
+
+
+def test_evaluator_normalizer_collapses_only_identical_duplicate_keys() -> None:
+    response = (
+        '{"schema_version":"1.0.0","evidence_ids":["fixture"],'
+        '"proof_status":"SUPPORTED","observations":["observed"],'
+        '"unknowns":["unknown"],"risks":["risk"],'
+        '"remediation":["remediate"],"validation":{'
+        '"allowed_steps":["read"],"negative_predicate":"no write",'
+        '"timeout_seconds":30,"timeout_seconds":30,'
+        '"stop_conditions":["timeout"],"cleanup":["none"]},'
+        '"prohibited_inferences":["impact"]}'
+    )
+    normalized, actions = evaluator.normalize_advisory(response)
+    assert evaluator.contract_errors(normalized) == []
+    assert actions == ["collapsed-identical-duplicate:timeout_seconds"]
+
+    value = __import__("json").loads(normalized)
+    value["validation"]["risks"] = value["risks"]
+    with pytest.raises(ValueError, match="cannot normalize"):
+        evaluator.normalize_advisory(__import__("json").dumps(value))
 
 
 def test_agent_generator_requires_one_typed_prompt_and_bounded_output(tmp_path: Path) -> None:
