@@ -66,3 +66,13 @@ def test_quality_gate_rejects_invalid_task_contract() -> None:
 
     assert result["pass"] is False
     assert "task cleanup_required must be true" in result["contract_errors"]
+
+
+def test_comparison_prompts_match_live_request_shape() -> None:
+    prompts = generator.comparison_prompts()
+
+    assert len(prompts) == 6
+    payload = json.loads(prompts[-1]["messages"][1]["content"])
+    assert payload["release"]["adapter_digest"] == prompts[-1]["expected_reviewer_identity"]
+    assert payload["review_packet"]["reference_index"]["pull_request_lock_ids"] == ["pr-agent"]
+    assert "tool_argument_keys" in payload["contract"]
