@@ -79,7 +79,7 @@ def validate_review(review: dict[str, Any], evidence_ids: set[str]) -> dict[str,
         require(finding["severity"] in {"critical", "high", "medium", "low"}, "invalid severity")
         require(
             finding["category"]
-            in {"correctness", "reliability", "security", "compatibility", "performance", "testing"},
+            in {"correctness", "reliability", "security", "compatibility", "performance", "testing", "style"},
             "invalid finding category",
         )
         require(isinstance(finding["path"], str) and finding["path"], "finding path is required")

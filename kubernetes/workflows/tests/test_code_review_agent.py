@@ -99,6 +99,13 @@ def test_response_accepts_bounded_patch_and_profile() -> None:
     assert validate_response(response(), release(), packet()) == response()
 
 
+def test_response_accepts_grounded_style_finding() -> None:
+    value = response()
+    value["review"]["findings"][0]["category"] = "style"
+
+    assert validate_response(value, release(), packet()) == value
+
+
 def test_request_distinguishes_finding_and_evidence_ids() -> None:
     payload = json.loads(make_request(release(), packet())["messages"][1]["content"])
 
