@@ -136,6 +136,25 @@ jq \
   --output "${evidence_dir}/site-evidence"
 
 jq -n \
+  --slurpfile site "${evidence_dir}/site-evidence/site-evidence.json" \
+  '{
+    reference_index: {
+      analyzer_profile_ids: [],
+      authorization_ids: [],
+      evidence_ids: ["site-evidence/proofs.json#0"],
+      finding_ids: [],
+      matrix_profile_ids: [],
+      query_ids: [],
+      repository_lock_ids: [],
+      reproduction_profile_ids: [],
+      source_lock_ids: [],
+      target_lock_ids: [],
+      test_profile_ids: []
+    },
+    site_evidence: $site[0]
+  }' >"${evidence_dir}/adviser-evidence-packet.json"
+
+jq -n \
   --slurpfile proof "${evidence_dir}/site-evidence/proofs.json" \
   '{
     title: "Synthetic fixture authorization boundary",
@@ -302,7 +321,7 @@ jq -n \
 "${cli}" agent run \
   --release "${model_dir}/release/advisor-release.json" \
   --manifest "${evidence_dir}/runtime-authorization.json" \
-  --evidence "${evidence_dir}/site-evidence/site-evidence.json" \
+  --evidence "${evidence_dir}/adviser-evidence-packet.json" \
   --response-fixture "${model_dir}/adviser-response-fixture.json" \
   --output "${model_dir}/adviser-run"
 
