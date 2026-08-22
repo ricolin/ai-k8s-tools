@@ -16,9 +16,10 @@ COPY kubernetes-CUDA/common/requirements.txt ./requirements.txt
 RUN python3 -m venv --system-site-packages /opt/ai-venv \
     && /opt/ai-venv/bin/python -m pip install --no-cache-dir -r requirements.txt
 
-# Keep the training runtime independent from any workflow-specific datasets,
-# evaluation gates, or serving contracts.
+# Keep the reusable model runtime independent from workflow-specific datasets
+# and evaluation gates.
 COPY kubernetes-CUDA/common/text_adapter_trainer.py ./trainer.py
+COPY kubernetes-CUDA/common/serve_text_adapter.py ./serve_reviewer.py
 COPY kubernetes-CUDA/code-review/generate_dataset.py ./generate_dataset.py
 COPY kubernetes-CUDA/code-review/evaluate_reviewer.py ./evaluate_reviewer.py
 COPY kubernetes-CUDA/code-review/quality_gate.py ./quality_gate.py

@@ -9,6 +9,7 @@ import pytest
 from ai_build_tools_k8s.code_review_model import (
     ContractError,
     record_digest,
+    render_node_local_serving,
     render_serving,
     render_training_job,
     validate_dataset,
@@ -148,3 +149,32 @@ def test_training_and_serving_can_tolerate_control_plane_taints() -> None:
     ]
     assert training["spec"]["template"]["spec"]["tolerations"] == expected
     assert serving["spec"]["predictor"]["tolerations"] == expected
+
+
+def test_node_local_serving_uses_the_verified_adapter_runtime() -> None:
+    value = render_node_local_serving(
+        release(),
+        "code-reviewer-c",
+        "ai-workflows",
+        "reviewer:v1",
+        "workspace",
+        "/workspace/foundation",
+        "/workspace/adapter",
+        "accelerator",
+        "h200",
+        "Never",
+        digest("9"),
+        True,
+    )
+    predictor = value["spec"]["predictor"]
+    container = predictor["containers"][0]
+
+    assert container["command"] == [
+        "/opt/ai-venv/bin/python",
+        "/opt/ai-code-review/serve_reviewer.py",
+    ]
+    assert container["args"][container["args"].index("--foundation-digest") + 1] == digest("a")
+    assert container["args"][container["args"].index("--adapter-digest") + 1] == digest("b")
+    assert container["imagePullPolicy"] == "Never"
+    assert predictor["tolerations"][0]["key"] == "node-role.kubernetes.io/control-plane"
+    assert value["metadata"]["annotations"]["ai-k8s-tools.ricolin.dev/node-local-image-id"] == digest("9")

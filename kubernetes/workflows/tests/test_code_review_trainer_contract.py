@@ -100,6 +100,7 @@ def test_code_review_image_uses_only_the_neutral_training_runtime() -> None:
     dockerfile = (ROOT / "kubernetes-CUDA/code-review/Dockerfile").read_text()
 
     assert "kubernetes-CUDA/common/text_adapter_trainer.py" in dockerfile
+    assert "kubernetes-CUDA/common/serve_text_adapter.py" in dockerfile
     assert "kubernetes-CUDA/security" not in dockerfile
     assert "serve_adviser.py" not in dockerfile
     assert "generate_agent_response.py" not in dockerfile

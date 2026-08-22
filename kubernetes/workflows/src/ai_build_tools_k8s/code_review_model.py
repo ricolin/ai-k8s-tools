@@ -275,6 +275,105 @@ def render_training_job(
     }
 
 
+def render_node_local_serving(
+    release: dict[str, Any],
+    name: str,
+    namespace: str,
+    serving_image: str,
+    pvc_name: str,
+    foundation_path: str,
+    adapter_path: str,
+    node_selector_key: str,
+    node_selector_value: str,
+    image_pull_policy: str,
+    node_local_image_id: str,
+    tolerate_control_plane: bool = False,
+) -> dict[str, Any]:
+    validate_release(release)
+    require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
+    if image_pull_policy == "Never":
+        require(":" in serving_image and "@" not in serving_image, "node-local image requires a tag")
+        require_sha256(node_local_image_id, "node_local_image_id")
+    else:
+        require_image(serving_image, "serving_image")
+        require(not node_local_image_id, "node_local_image_id is only valid with Never")
+    for value, field in ((foundation_path, "foundation_path"), (adapter_path, "adapter_path")):
+        require(value.startswith("/workspace/"), f"{field} must be on the workspace volume")
+
+    predictor: dict[str, Any] = {
+        "automountServiceAccountToken": False,
+        "minReplicas": 1,
+        "maxReplicas": 1,
+        "containers": [
+            {
+                "name": "kserve-container",
+                "image": serving_image,
+                "imagePullPolicy": image_pull_policy,
+                "command": ["/opt/ai-venv/bin/python", "/opt/ai-code-review/serve_reviewer.py"],
+                "args": [
+                    "--foundation", foundation_path,
+                    "--adapter", adapter_path,
+                    "--foundation-digest", release["foundation_digest"],
+                    "--adapter-digest", release["adapter_digest"],
+                    "--model-name", release["serving_model_name"],
+                    "--max-new-tokens", "2048",
+                    "--port", "8000",
+                ],
+                "env": [
+                    {"name": "HF_HUB_OFFLINE", "value": "1"},
+                    {"name": "TRANSFORMERS_OFFLINE", "value": "1"},
+                    {"name": "TOKENIZERS_PARALLELISM", "value": "false"},
+                ],
+                "ports": [{"name": "http1", "containerPort": 8000, "protocol": "TCP"}],
+                "startupProbe": {
+                    "httpGet": {"path": "/health", "port": 8000},
+                    "periodSeconds": 10,
+                    "failureThreshold": 90,
+                },
+                "readinessProbe": {
+                    "httpGet": {"path": "/health", "port": 8000},
+                    "periodSeconds": 10,
+                    "failureThreshold": 6,
+                },
+                "livenessProbe": {
+                    "httpGet": {"path": "/health", "port": 8000},
+                    "periodSeconds": 30,
+                    "failureThreshold": 3,
+                },
+                "resources": {
+                    "requests": {"nvidia.com/gpu": 1, "cpu": "4", "memory": "64Gi"},
+                    "limits": {"nvidia.com/gpu": 1, "cpu": "32", "memory": "256Gi"},
+                },
+                "securityContext": {
+                    "allowPrivilegeEscalation": False,
+                    "capabilities": {"drop": ["ALL"]},
+                    "runAsNonRoot": True,
+                    "runAsUser": 65532,
+                    "runAsGroup": 65532,
+                },
+                "volumeMounts": [{"name": "workspace", "mountPath": "/workspace", "readOnly": True}],
+            }
+        ],
+        "volumes": [{"name": "workspace", "persistentVolumeClaim": {"claimName": pvc_name}}],
+    }
+    if node_selector_key and node_selector_value:
+        predictor["nodeSelector"] = {node_selector_key: node_selector_value}
+    add_control_plane_tolerations(predictor, tolerate_control_plane)
+    annotations = {
+        "serving.kserve.io/deploymentMode": "Standard",
+        "ai-k8s-tools.ricolin.dev/foundation-digest": release["foundation_digest"],
+        "ai-k8s-tools.ricolin.dev/adapter-digest": release["adapter_digest"],
+    }
+    if node_local_image_id:
+        annotations["ai-k8s-tools.ricolin.dev/node-local-image-id"] = node_local_image_id
+    return {
+        "apiVersion": "serving.kserve.io/v1beta1",
+        "kind": "InferenceService",
+        "metadata": {"name": name, "namespace": namespace, "annotations": annotations},
+        "spec": {"predictor": predictor},
+    }
+
+
 def render_serving(
     release: dict[str, Any],
     name: str,
@@ -446,6 +545,21 @@ def build_parser() -> argparse.ArgumentParser:
     serving.add_argument("--node-selector-value", default="")
     serving.add_argument("--tolerate-control-plane", action="store_true")
     serving.add_argument("--output", required=True)
+
+    node_serving = commands.add_parser("render-node-local-serving")
+    node_serving.add_argument("--release", required=True)
+    node_serving.add_argument("--name", required=True)
+    node_serving.add_argument("--namespace", required=True)
+    node_serving.add_argument("--serving-image", required=True)
+    node_serving.add_argument("--pvc", required=True)
+    node_serving.add_argument("--foundation-path", required=True)
+    node_serving.add_argument("--adapter-path", required=True)
+    node_serving.add_argument("--node-selector-key", default="")
+    node_serving.add_argument("--node-selector-value", default="")
+    node_serving.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="IfNotPresent")
+    node_serving.add_argument("--node-local-image-id", default="")
+    node_serving.add_argument("--tolerate-control-plane", action="store_true")
+    node_serving.add_argument("--output", required=True)
     return parser
 
 
@@ -513,6 +627,24 @@ def main() -> None:
                     args.gpu_count,
                     args.node_selector_key,
                     args.node_selector_value,
+                    args.tolerate_control_plane,
+                ),
+            )
+        elif args.command == "render-node-local-serving":
+            write_json(
+                Path(args.output),
+                render_node_local_serving(
+                    load_json(Path(args.release)),
+                    args.name,
+                    args.namespace,
+                    args.serving_image,
+                    args.pvc,
+                    args.foundation_path,
+                    args.adapter_path,
+                    args.node_selector_key,
+                    args.node_selector_value,
+                    args.image_pull_policy,
+                    args.node_local_image_id,
                     args.tolerate_control_plane,
                 ),
             )
