@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).parents[3]
 
@@ -20,6 +22,8 @@ def load_module(name: str, relative_path: str):
 
 generator = load_module("code_review_dataset", "kubernetes-CUDA/code-review/generate_dataset.py")
 quality_gate = load_module("code_review_quality_gate", "kubernetes-CUDA/code-review/quality_gate.py")
+sys.modules["quality_gate"] = quality_gate
+evaluator = load_module("code_review_evaluator", "kubernetes-CUDA/code-review/evaluate_reviewer.py")
 
 trainer_path = ROOT / "kubernetes-CUDA/common/text_adapter_trainer.py"
 trainer_spec = importlib.util.spec_from_file_location("text_adapter_trainer", trainer_path)
@@ -170,6 +174,55 @@ def test_code_review_runtime_supports_explicit_json_prefill() -> None:
 
     assert 'response_prefix in {"", "{"}' in runtime
     assert 'config.get("response_prefix", "") in {"", "{"}' in evaluator
+
+
+def comparison_config(tmp_path: Path, stages: list[dict[str, str | None]]) -> dict[str, object]:
+    return {
+        "schema_version": "1.0.0",
+        "foundation_path": str(tmp_path / "foundation"),
+        "foundation_digest": "sha256:" + ("a" * 64),
+        "prompts_path": str(tmp_path / "prompts.json"),
+        "output_dir": str(tmp_path / "output"),
+        "max_new_tokens": 2048,
+        "response_prefix": "{",
+        "stages": stages,
+    }
+
+
+def test_code_review_evaluator_accepts_ordered_stage_subset(tmp_path: Path) -> None:
+    value = comparison_config(
+        tmp_path,
+        [
+            {
+                "name": "C",
+                "adapter_path": str(tmp_path / "release-c"),
+                "adapter_digest": "sha256:" + ("c" * 64),
+            }
+        ],
+    )
+    config_path = tmp_path / "comparison.json"
+    config_path.write_text(json.dumps(value))
+
+    assert [item["name"] for item in evaluator.load_config(config_path)["stages"]] == ["C"]
+
+
+@pytest.mark.parametrize("names", [["C", "B"], ["C", "C"], ["candidate"]])
+def test_code_review_evaluator_rejects_invalid_stage_subset(
+    tmp_path: Path, names: list[str]
+) -> None:
+    stages = [
+        {
+            "name": name,
+            "adapter_path": str(tmp_path / f"release-{name}"),
+            "adapter_digest": "sha256:" + ("d" * 64),
+        }
+        for name in names
+    ]
+    config_path = tmp_path / "comparison.json"
+    config_path.write_text(json.dumps(comparison_config(tmp_path, stages)))
+
+    with pytest.raises(ValueError, match="ordered subset"):
+        evaluator.load_config(config_path)
 
 
 def test_neutral_training_runtime_keeps_the_release_chain_contract(tmp_path: Path) -> None:

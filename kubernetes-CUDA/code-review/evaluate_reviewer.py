@@ -9,6 +9,9 @@ from typing import Any
 from quality_gate import validate_response_text
 
 
+STAGE_ORDER = ("foundation", "A", "B", "C")
+
+
 def canonical_json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
 
@@ -43,9 +46,13 @@ def load_config(path: Path) -> dict[str, Any]:
     require(Path(config["foundation_path"]).is_absolute(), "foundation path must be absolute")
     require(str(config["foundation_digest"]).startswith("sha256:"), "foundation digest is required")
     stages = config.get("stages")
+    names = [item.get("name") for item in stages] if isinstance(stages, list) else []
     require(
-        isinstance(stages, list) and [item.get("name") for item in stages] == ["foundation", "A", "B", "C"],
-        "stages must be foundation, A, B, C",
+        bool(names)
+        and len(names) == len(set(names))
+        and all(name in STAGE_ORDER for name in names)
+        and names == sorted(names, key=STAGE_ORDER.index),
+        "stages must be a non-empty ordered subset of foundation, A, B, C",
     )
     for item in stages:
         if item["name"] == "foundation":
@@ -153,7 +160,9 @@ def evaluate(config_path: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Deterministic foundation/A/B/C code-review comparison")
+    parser = argparse.ArgumentParser(
+        description="Deterministic code-review comparison for an ordered stage subset"
+    )
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
     evaluate(Path(args.config))
