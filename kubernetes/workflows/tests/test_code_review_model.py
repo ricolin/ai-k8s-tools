@@ -9,6 +9,7 @@ import pytest
 from ai_build_tools_k8s.code_review_model import (
     ContractError,
     record_digest,
+    render_comparison_job,
     render_node_local_serving,
     render_serving,
     render_training_job,
@@ -181,3 +182,25 @@ def test_node_local_serving_uses_the_verified_adapter_runtime() -> None:
     assert predictor["securityContext"]["seccompProfile"] == {"type": "RuntimeDefault"}
     assert predictor["tolerations"][0]["key"] == "node-role.kubernetes.io/control-plane"
     assert value["metadata"]["annotations"]["ai-k8s-tools.ricolin.dev/node-local-image-id"] == digest("9")
+
+
+def test_comparison_job_uses_one_gpu_and_restricted_identity() -> None:
+    value = render_comparison_job(
+        "compare",
+        "ai-workflows",
+        "reviewer:v1",
+        "workspace",
+        "/workspace/configs/compare.json",
+        "accelerator",
+        "h200",
+        "Never",
+        digest("8"),
+        True,
+    )
+    pod = value["spec"]["template"]["spec"]
+    container = pod["containers"][0]
+
+    assert container["command"][-1] == "/opt/ai-code-review/evaluate_reviewer.py"
+    assert container["resources"]["requests"]["nvidia.com/gpu"] == 1
+    assert pod["securityContext"]["runAsUser"] == 65532
+    assert value["spec"]["activeDeadlineSeconds"] == 7200

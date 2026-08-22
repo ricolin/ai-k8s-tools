@@ -390,6 +390,88 @@ def render_node_local_serving(
     }
 
 
+def render_comparison_job(
+    name: str,
+    namespace: str,
+    evaluator_image: str,
+    pvc_name: str,
+    config_path: str,
+    node_selector_key: str,
+    node_selector_value: str,
+    image_pull_policy: str,
+    node_local_image_id: str,
+    tolerate_control_plane: bool = False,
+) -> dict[str, Any]:
+    require(config_path.startswith("/workspace/"), "comparison config must be on the workspace volume")
+    require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
+    if image_pull_policy == "Never":
+        require(":" in evaluator_image and "@" not in evaluator_image, "node-local image requires a tag")
+        require_sha256(node_local_image_id, "node_local_image_id")
+    else:
+        require_image(evaluator_image, "evaluator_image")
+        require(not node_local_image_id, "node_local_image_id is only valid with Never")
+    pod_spec: dict[str, Any] = {
+        "restartPolicy": "Never",
+        "automountServiceAccountToken": False,
+        "securityContext": {
+            "runAsNonRoot": True,
+            "runAsUser": 65532,
+            "runAsGroup": 65532,
+            "fsGroup": 65532,
+            "seccompProfile": {"type": "RuntimeDefault"},
+        },
+        "containers": [
+            {
+                "name": "compare",
+                "image": evaluator_image,
+                "imagePullPolicy": image_pull_policy,
+                "command": ["/opt/ai-venv/bin/python", "/opt/ai-code-review/evaluate_reviewer.py"],
+                "args": ["--config", config_path],
+                "env": [
+                    {"name": "HF_HUB_OFFLINE", "value": "1"},
+                    {"name": "TRANSFORMERS_OFFLINE", "value": "1"},
+                    {"name": "TOKENIZERS_PARALLELISM", "value": "false"},
+                ],
+                "resources": {
+                    "requests": {"nvidia.com/gpu": 1, "cpu": "4", "memory": "64Gi"},
+                    "limits": {"nvidia.com/gpu": 1, "cpu": "32", "memory": "256Gi"},
+                },
+                "securityContext": {
+                    "allowPrivilegeEscalation": False,
+                    "capabilities": {"drop": ["ALL"]},
+                    "runAsNonRoot": True,
+                    "runAsUser": 65532,
+                    "runAsGroup": 65532,
+                },
+                "volumeMounts": [
+                    {"name": "workspace", "mountPath": "/workspace"},
+                    {"name": "dshm", "mountPath": "/dev/shm"},
+                ],
+            }
+        ],
+        "volumes": [
+            {"name": "workspace", "persistentVolumeClaim": {"claimName": pvc_name}},
+            {"name": "dshm", "emptyDir": {"medium": "Memory", "sizeLimit": "8Gi"}},
+        ],
+    }
+    if node_selector_key and node_selector_value:
+        pod_spec["nodeSelector"] = {node_selector_key: node_selector_value}
+    add_control_plane_tolerations(pod_spec, tolerate_control_plane)
+    metadata: dict[str, Any] = {"name": name, "namespace": namespace}
+    if node_local_image_id:
+        metadata["annotations"] = {"ai-k8s-tools.ricolin.dev/node-local-image-id": node_local_image_id}
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": metadata,
+        "spec": {
+            "backoffLimit": 0,
+            "activeDeadlineSeconds": 7200,
+            "template": {"metadata": {"labels": {"app": name}}, "spec": pod_spec},
+        },
+    }
+
+
 def render_serving(
     release: dict[str, Any],
     name: str,
@@ -576,6 +658,19 @@ def build_parser() -> argparse.ArgumentParser:
     node_serving.add_argument("--node-local-image-id", default="")
     node_serving.add_argument("--tolerate-control-plane", action="store_true")
     node_serving.add_argument("--output", required=True)
+
+    comparison = commands.add_parser("render-comparison-job")
+    comparison.add_argument("--name", required=True)
+    comparison.add_argument("--namespace", required=True)
+    comparison.add_argument("--evaluator-image", required=True)
+    comparison.add_argument("--pvc", required=True)
+    comparison.add_argument("--config-path", required=True)
+    comparison.add_argument("--node-selector-key", default="")
+    comparison.add_argument("--node-selector-value", default="")
+    comparison.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="IfNotPresent")
+    comparison.add_argument("--node-local-image-id", default="")
+    comparison.add_argument("--tolerate-control-plane", action="store_true")
+    comparison.add_argument("--output", required=True)
     return parser
 
 
@@ -657,6 +752,22 @@ def main() -> None:
                     args.pvc,
                     args.foundation_path,
                     args.adapter_path,
+                    args.node_selector_key,
+                    args.node_selector_value,
+                    args.image_pull_policy,
+                    args.node_local_image_id,
+                    args.tolerate_control_plane,
+                ),
+            )
+        elif args.command == "render-comparison-job":
+            write_json(
+                Path(args.output),
+                render_comparison_job(
+                    args.name,
+                    args.namespace,
+                    args.evaluator_image,
+                    args.pvc,
+                    args.config_path,
                     args.node_selector_key,
                     args.node_selector_value,
                     args.image_pull_policy,
