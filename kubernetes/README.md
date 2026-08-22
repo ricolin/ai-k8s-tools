@@ -48,6 +48,17 @@ The released-adviser and reports-only agent path is documented in
 [the grounded security-agent guide](../docs/security-agent-workflow.md), with
 failure recovery in [troubleshooting](../docs/troubleshooting.md).
 
+The code-review track is separate from that retained security workflow:
+
+- `kubernetes/code-review` contains portable review, release, agent, and
+  sandbox contracts;
+- `kubernetes-CUDA/code-review` contains the H200 dataset, trainer image,
+  deterministic comparison, and quality gate; and
+- [code-review workflow](../docs/code-review-workflow.md) and
+  [code-review agent workflow](../docs/code-review-agent-workflow.md) document
+  A/B/C training, repository or pull-request review, sandbox patching, unit
+  tests, and `fix.patch` export.
+
 ## Rendered manifest validation
 
 Shell-rendered manifests must be checked before they reach the API server. The

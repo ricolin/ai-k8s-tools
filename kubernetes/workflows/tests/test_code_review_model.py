@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+
+from ai_build_tools_k8s.code_review_model import (
+    ContractError,
+    record_digest,
+    render_training_job,
+    validate_dataset,
+    validate_dataset_record,
+    validate_release,
+)
+
+
+def digest(character: str = "a") -> str:
+    return "sha256:" + (character * 64)
+
+
+def release() -> dict:
+    return {
+        "schema_version": "1.0.0",
+        "stage": "C",
+        "validation_level": "AUTOMATED_ACCEPTED",
+        "foundation_digest": digest("a"),
+        "adapter_digest": digest("b"),
+        "tokenizer_digest": digest("c"),
+        "chat_template_digest": digest("d"),
+        "review_schema_digest": digest("e"),
+        "agent_plan_schema_digest": digest("f"),
+        "policy_profile_digest": digest("1"),
+        "serving_model_name": "code-reviewer-c",
+        "lora_rank": 16,
+        "supported_languages": ["bash", "go", "python", "rust", "yaml"],
+        "supported_target_types": ["agent-plan", "pull-request", "repository", "single-file"],
+    }
+
+
+def record(language: str, identifier: str) -> dict:
+    value = {
+        "id": identifier,
+        "stage": "A",
+        "split": "train",
+        "source": "fixture",
+        "license": "CC0-1.0",
+        "permission_confirmed": True,
+        "target_type": "single-file",
+        "languages": [language],
+        "messages": [
+            {"role": "user", "content": "review"},
+            {"role": "assistant", "content": "result"},
+        ],
+    }
+    value["record_digest"] = record_digest(value)
+    return value
+
+
+def test_release_contract() -> None:
+    assert validate_release(release()) == release()
+    invalid = release()
+    invalid["supported_languages"].remove("rust")
+    with pytest.raises(ContractError, match="languages are incomplete"):
+        validate_release(invalid)
+
+
+def test_dataset_covers_every_language(tmp_path: Path) -> None:
+    records = [record(language, f"record-{index}") for index, language in enumerate(("bash", "go", "python", "rust", "yaml"))]
+    records_path = tmp_path / "records.jsonl"
+    records_path.write_text("".join(json.dumps(item, sort_keys=True, separators=(",", ":")) + "\n" for item in records))
+    manifest = {
+        "schema_version": "1.0.0",
+        "license_review_complete": True,
+        "records": "records.jsonl",
+        "records_digest": "sha256:" + hashlib.sha256(records_path.read_bytes()).hexdigest(),
+        "record_count": 5,
+        "stage_counts": {"A": 5, "B": 0, "C": 0},
+        "split_counts": {"adversarial": 0, "hidden": 0, "train": 5, "validation": 0},
+        "language_counts": {"bash": 1, "go": 1, "python": 1, "rust": 1, "yaml": 1},
+    }
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+    assert validate_dataset(manifest_path, tmp_path)["status"] == "PASS"
+    records[0]["record_digest"] = digest("0")
+    with pytest.raises(ContractError, match="record digest mismatch"):
+        validate_dataset_record(records[0])
+
+
+def test_training_job_uses_code_review_entrypoint() -> None:
+    value = render_training_job(
+        "review-a",
+        "ai-workflows",
+        "reviewer:v1",
+        "workspace",
+        "/workspace/configs/a.json",
+        8,
+        "accelerator",
+        "h200",
+        "Never",
+        digest("a"),
+    )
+    container = value["spec"]["template"]["spec"]["containers"][0]
+    assert "/opt/ai-code-review/trainer.py" in container["args"]
+    assert container["resources"]["limits"]["nvidia.com/gpu"] == 8

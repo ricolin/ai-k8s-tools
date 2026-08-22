@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "name": "sandboxed-code-review-and-fix",
+  "allowed_outputs": [
+    "review-report.json",
+    "fix.patch",
+    "fix.patch.sha256",
+    "unit-tests.log",
+    "result.env"
+  ],
+  "allowed_model_actions": [
+    "review supplied source and diff evidence",
+    "select an operator-supplied test profile",
+    "propose one text-only unified diff",
+    "request sandbox patch application and unit tests"
+  ],
+  "sandbox_guarantees": [
+    "pinned public HTTPS repository and commit",
+    "no host path or service-account token",
+    "restricted pod security and dropped capabilities",
+    "network available only to fetch and dependency preparation jobs",
+    "patch and tests run without network egress",
+    "no commit, push, GitHub comment, issue, or pull-request mutation"
+  ]
+}

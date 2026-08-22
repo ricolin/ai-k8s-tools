@@ -20,7 +20,7 @@ cd "${workflow_root}"
 
 show_help() {
   cat <<'EOF'
-usage: ai-workflow {capabilities|agent|model|image|research|RESEARCH_COMMAND} ...
+usage: ai-workflow {capabilities|agent|model|image|research|code-review|code-agent|code-sandbox|RESEARCH_COMMAND} ...
 
 Command groups:
   capabilities       Print implemented contract capabilities.
@@ -28,6 +28,9 @@ Command groups:
   model              Validate datasets/releases and render training/serving.
   image              Validate image prompts and render CUDA Jobs.
   research           Lock source/runtime evidence and render private reports.
+  code-review        Validate code-review data/releases and render training/serving.
+  code-agent         Generate and validate grounded review, fix, and test plans.
+  code-sandbox       Render isolated fetch, patch, unit-test, and patch-export Jobs.
   RESEARCH_COMMAND   Compatibility shortcut for a research subcommand.
 
 Run "ai-workflow <group> --help" for group-specific commands.
@@ -46,7 +49,10 @@ case "${command_name}" in
       security-agent-plan-policy-v1 \
       security-model-dataset-contract-v1 \
       security-model-training-job-v1 \
-      security-model-kserve-vllm-v1
+      security-model-kserve-vllm-v1 \
+      code-review-model-abc-v1 \
+      code-review-agent-patch-v1 \
+      code-review-sandbox-v1
     ;;
   agent)
     shift
@@ -63,6 +69,18 @@ case "${command_name}" in
   research)
     shift
     exec "${uv_bin}" run --frozen ai-security-research "$@"
+    ;;
+  code-review)
+    shift
+    exec "${uv_bin}" run --frozen ai-code-review-model "$@"
+    ;;
+  code-agent)
+    shift
+    exec "${uv_bin}" run --frozen ai-code-review-agent "$@"
+    ;;
+  code-sandbox)
+    shift
+    exec "${uv_bin}" run --frozen ai-code-review-sandbox "$@"
     ;;
   "")
     show_help >&2

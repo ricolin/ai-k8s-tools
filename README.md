@@ -11,7 +11,11 @@ research work separate from the standalone bare-metal workflow in
 - mCAPI-compatible Kubernetes profiles and deployment helpers;
 - physical NVIDIA H200 and CUDA acceptance templates;
 - SDXL watercolor/detail A/B training and comparison jobs;
-- Qwen security-adviser A/B/C training and vLLM/KServe serving contracts;
+- Qwen code-review A/B/C training for Bash, Python, Go, Rust, and YAML;
+- a sandboxed repository and pull-request agent that can test and export a
+  candidate `fix.patch` without pushing or publishing it;
+- retained Qwen security-adviser A/B/C and research resources in separate
+  `security` paths;
 - an analysis-only security agent and public-source/runtime research sandbox;
 - immutable evidence, dataset, source, release, and reports-only gates; and
 - local fixture validation that does not claim physical GPU proof.
@@ -33,6 +37,8 @@ scripts/                Shared GPU runtime bootstrap helper
 Start with:
 
 - [Kubernetes workflow](docs/kubernetes-workflow.md)
+- [Code-review model workflow](docs/code-review-workflow.md)
+- [Code-review patch-and-test agent](docs/code-review-agent-workflow.md)
 - [Grounded security-agent workflow](docs/security-agent-workflow.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Kubernetes tools](kubernetes/README.md)
@@ -52,11 +58,13 @@ bash -n \
   kubernetes/mcapi/*.sh \
   kubernetes/platform/*.sh \
   kubernetes-CUDA/image/*.sh \
+  kubernetes-CUDA/code-review/*.sh \
   kubernetes-CUDA/security/*.sh \
   scripts/*.sh
 
 python3 -m py_compile \
   kubernetes-CUDA/image/*.py \
+  kubernetes-CUDA/code-review/*.py \
   kubernetes-CUDA/security/*.py
 
 ./kubernetes/tools/verify-security-research-implementation.sh \

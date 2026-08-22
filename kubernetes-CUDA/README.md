@@ -14,6 +14,9 @@ multi-GPU training, model quality, or GPU-backed inference.
 ```text
 kubernetes-CUDA/
 ├── README.md
+├── code-review/              # Qwen code-review A/B/C and patch-agent gates
+├── image/                    # SDXL image workflow
+├── security/                 # Retained, separate defensive-security workflow
 ├── validation-plan.md
 └── templates/
     ├── h200-validation.env.example
@@ -24,6 +27,11 @@ kubernetes-CUDA/
 
 - [validation-plan.md](validation-plan.md) is the reproducible implementation
   and validation runbook.
+- [Code-review workflow](../docs/code-review-workflow.md) is the primary Qwen
+  text workflow. Its Release C feeds the separate sandbox patch-and-test agent.
+- `security/` remains available for the earlier defensive-adviser validation;
+  its datasets, contracts, adapters, and evidence are not reused as code-review
+  model resources.
 - [`../scripts/bootstrap_gpu_runtime.sh`](../scripts/bootstrap_gpu_runtime.sh)
   installs the accepted Ubuntu server-open driver, Fabric Manager, matching
   kernel headers/extras, and NVIDIA Container Toolkit. It verifies that the

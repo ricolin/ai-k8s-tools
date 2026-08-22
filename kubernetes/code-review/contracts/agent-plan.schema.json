@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-k8s-tools.ricolin.dev/code-review/agent-plan.schema.json",
+  "title": "Code review sandbox execution plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["repository_lock_id", "pull_request_lock_id", "tasks"],
+  "properties": {
+    "repository_lock_id": {"type": "string", "minLength": 1},
+    "pull_request_lock_id": {"type": ["string", "null"]},
+    "tasks": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "tool", "arguments", "timeout_seconds", "cleanup_required"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "tool": {
+            "enum": [
+              "inspect_repository",
+              "inspect_diff",
+              "apply_candidate_patch",
+              "run_profile",
+              "collect_test_results",
+              "export_patch",
+              "draft_review"
+            ]
+          },
+          "arguments": {"type": "object"},
+          "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 3600},
+          "cleanup_required": {"const": true}
+        }
+      }
+    }
+  }
+}

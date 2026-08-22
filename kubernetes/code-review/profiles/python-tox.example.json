@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "id": "python-tox",
+  "fetch_image": "registry.example/git@sha256:REPLACE",
+  "runner_image": "registry.example/python-review@sha256:REPLACE",
+  "prepare_commands": [
+    ["python3", "-m", "venv", "/workspace/.venv"],
+    ["/workspace/.venv/bin/python", "-m", "pip", "install", "tox"]
+  ],
+  "test_commands": [
+    ["/workspace/.venv/bin/tox", "-e", "pep8"],
+    ["/workspace/.venv/bin/tox", "-e", "py3"]
+  ],
+  "timeout_seconds": 3600
+}

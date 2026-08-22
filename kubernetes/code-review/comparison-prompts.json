@@ -1,0 +1,50 @@
+[
+  {
+    "id": "python-review",
+    "expected_reviewer_identity": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "messages": [
+      {"role": "system", "content": "Return the exact code-review JSON contract. Cite only supplied evidence and do not claim tests ran."},
+      {"role": "user", "content": "reviewer_identity is sha256:1111111111111111111111111111111111111111111111111111111111111111. Repository lock repo-python, profile python-unit, and evidence python-diff show src/cache.py line 18: def append(value, values=[]). Review it."}
+    ]
+  },
+  {
+    "id": "go-review",
+    "expected_reviewer_identity": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "messages": [
+      {"role": "system", "content": "Return the exact code-review JSON contract. Cite only supplied evidence and do not claim tests ran."},
+      {"role": "user", "content": "reviewer_identity is sha256:2222222222222222222222222222222222222222222222222222222222222222. Repository lock repo-go, profile go-unit, and evidence go-diff show worker/runner.go line 42 captures a range variable in a goroutine. Review it."}
+    ]
+  },
+  {
+    "id": "rust-review",
+    "expected_reviewer_identity": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "messages": [
+      {"role": "system", "content": "Return the exact code-review JSON contract. Cite only supplied evidence and do not claim tests ran."},
+      {"role": "user", "content": "reviewer_identity is sha256:3333333333333333333333333333333333333333333333333333333333333333. Repository lock repo-rust, profile rust-unit, and evidence rust-diff show src/service.rs line 73 unwraps parsing of external input. Review it."}
+    ]
+  },
+  {
+    "id": "bash-review",
+    "expected_reviewer_identity": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "messages": [
+      {"role": "system", "content": "Return the exact code-review JSON contract. Cite only supplied evidence and do not claim tests ran."},
+      {"role": "user", "content": "reviewer_identity is sha256:4444444444444444444444444444444444444444444444444444444444444444. Repository lock repo-bash, profile bash-unit, and evidence bash-diff show scripts/publish.sh line 9 expands filenames without quoting. Review it."}
+    ]
+  },
+  {
+    "id": "yaml-review",
+    "expected_reviewer_identity": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "messages": [
+      {"role": "system", "content": "Return the exact code-review JSON contract. Cite only supplied evidence and do not claim tests ran."},
+      {"role": "user", "content": "reviewer_identity is sha256:5555555555555555555555555555555555555555555555555555555555555555. Repository lock repo-yaml, profile yaml-unit, and evidence yaml-diff show .github/workflows/test.yaml line 21 uses vendor/action@main. Review it."}
+    ]
+  },
+  {
+    "id": "pr-agent-fix",
+    "expected_reviewer_identity": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+    "messages": [
+      {"role": "system", "content": "Return the exact code-review JSON contract with a bounded candidate unified diff and typed sandbox plan. Do not emit shell commands."},
+      {"role": "user", "content": "reviewer_identity is sha256:6666666666666666666666666666666666666666666666666666666666666666. Repository lock repo-agent, pull-request lock pr-agent, profile python-unit, and evidence agent-diff show src/cache.py line 18 uses a mutable default. Propose a fix, run_profile plan, and export_patch plan."}
+    ]
+  }
+]

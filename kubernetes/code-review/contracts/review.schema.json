@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-k8s-tools.ricolin.dev/code-review/review.schema.json",
+  "title": "Code review result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "summary", "verdict", "findings", "tests", "unknowns"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "summary": {"type": "string", "minLength": 1},
+    "verdict": {"enum": ["APPROVE", "COMMENT", "REQUEST_CHANGES"]},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severity", "category", "path", "line", "evidence", "impact", "recommendation", "test"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "severity": {"enum": ["critical", "high", "medium", "low"]},
+          "category": {"enum": ["correctness", "reliability", "security", "compatibility", "performance", "testing"]},
+          "path": {"type": "string", "minLength": 1},
+          "line": {"type": "integer", "minimum": 1},
+          "evidence": {"type": "string", "minLength": 1},
+          "impact": {"type": "string", "minLength": 1},
+          "recommendation": {"type": "string", "minLength": 1},
+          "test": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "tests": {"type": "array", "items": {"type": "string"}},
+    "unknowns": {"type": "array", "items": {"type": "string"}}
+  }
+}
