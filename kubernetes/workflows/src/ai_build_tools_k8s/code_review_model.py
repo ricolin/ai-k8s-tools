@@ -6,7 +6,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ai_build_tools_k8s.workflow import canonical_json, sha256_file, sha256_tree, write_json
+from ai_build_tools_k8s.workflow import (
+    add_control_plane_tolerations,
+    canonical_json,
+    sha256_file,
+    sha256_tree,
+    write_json,
+)
 
 
 SCHEMA_VERSION = "1.0.0"
@@ -202,6 +208,7 @@ def render_training_job(
     node_selector_value: str,
     image_pull_policy: str,
     node_local_image_id: str,
+    tolerate_control_plane: bool = False,
 ) -> dict[str, Any]:
     require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
     if image_pull_policy == "Never":
@@ -256,6 +263,7 @@ def render_training_job(
     }
     if node_selector_key and node_selector_value:
         pod_spec["nodeSelector"] = {node_selector_key: node_selector_value}
+    add_control_plane_tolerations(pod_spec, tolerate_control_plane)
     metadata: dict[str, Any] = {"name": name, "namespace": namespace}
     if node_local_image_id:
         metadata["annotations"] = {"ai-k8s-tools.ricolin.dev/node-local-image-id": node_local_image_id}
@@ -277,6 +285,7 @@ def render_serving(
     gpu_count: int,
     node_selector_key: str,
     node_selector_value: str,
+    tolerate_control_plane: bool = False,
 ) -> dict[str, Any]:
     validate_release(release)
     require_image(vllm_image, "vllm_image")
@@ -336,6 +345,7 @@ def render_serving(
     }
     if node_selector_key and node_selector_value:
         predictor["nodeSelector"] = {node_selector_key: node_selector_value}
+    add_control_plane_tolerations(predictor, tolerate_control_plane)
     return {
         "apiVersion": "serving.kserve.io/v1beta1",
         "kind": "InferenceService",
@@ -421,6 +431,7 @@ def build_parser() -> argparse.ArgumentParser:
     training.add_argument("--node-selector-value", default="")
     training.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="IfNotPresent")
     training.add_argument("--node-local-image-id", default="")
+    training.add_argument("--tolerate-control-plane", action="store_true")
     training.add_argument("--output", required=True)
 
     serving = commands.add_parser("render-serving")
@@ -433,6 +444,7 @@ def build_parser() -> argparse.ArgumentParser:
     serving.add_argument("--gpu-count", type=int, required=True)
     serving.add_argument("--node-selector-key", default="")
     serving.add_argument("--node-selector-value", default="")
+    serving.add_argument("--tolerate-control-plane", action="store_true")
     serving.add_argument("--output", required=True)
     return parser
 
@@ -485,6 +497,7 @@ def main() -> None:
                     args.node_selector_value,
                     args.image_pull_policy,
                     args.node_local_image_id,
+                    args.tolerate_control_plane,
                 ),
             )
         elif args.command == "render-serving":
@@ -500,6 +513,7 @@ def main() -> None:
                     args.gpu_count,
                     args.node_selector_key,
                     args.node_selector_value,
+                    args.tolerate_control_plane,
                 ),
             )
     except ContractError as error:

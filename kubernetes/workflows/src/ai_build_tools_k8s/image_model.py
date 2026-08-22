@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ai_build_tools_k8s.security_research import ContractError, _load_json, _require, _require_sha256
-from ai_build_tools_k8s.workflow import sha256_file, write_json
+from ai_build_tools_k8s.workflow import add_control_plane_tolerations, sha256_file, write_json
 
 
 def require_image_digest(value: str, field: str) -> None:
@@ -56,6 +56,7 @@ def render_image_job(
     node_selector_value: str,
     image_pull_policy: str = "IfNotPresent",
     node_local_image_id: str = "",
+    tolerate_control_plane: bool = False,
 ) -> dict[str, Any]:
     _require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
     if image_pull_policy == "Never":
@@ -102,6 +103,7 @@ def render_image_job(
     }
     if node_selector_key and node_selector_value:
         pod_spec["nodeSelector"] = {node_selector_key: node_selector_value}
+    add_control_plane_tolerations(pod_spec, tolerate_control_plane)
     metadata: dict[str, Any] = {"name": name, "namespace": namespace}
     if node_local_image_id:
         metadata["annotations"] = {"ai-build-tools.ricolin.dev/node-local-image-id": node_local_image_id}
@@ -179,6 +181,7 @@ def build_parser() -> argparse.ArgumentParser:
     job.add_argument("--node-selector-value", default="")
     job.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="IfNotPresent")
     job.add_argument("--node-local-image-id", default="")
+    job.add_argument("--tolerate-control-plane", action="store_true")
     job.add_argument("--output", required=True)
     return parser
 
@@ -203,6 +206,7 @@ def main() -> None:
                     args.node_selector_value,
                     args.image_pull_policy,
                     args.node_local_image_id,
+                    args.tolerate_control_plane,
                 ),
             )
     except ContractError as error:

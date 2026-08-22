@@ -9,6 +9,7 @@ import pytest
 from ai_build_tools_k8s.code_review_model import (
     ContractError,
     record_digest,
+    render_serving,
     render_training_job,
     validate_dataset,
     validate_dataset_record,
@@ -104,3 +105,46 @@ def test_training_job_uses_code_review_entrypoint() -> None:
     container = value["spec"]["template"]["spec"]["containers"][0]
     assert "/opt/ai-code-review/trainer.py" in container["args"]
     assert container["resources"]["limits"]["nvidia.com/gpu"] == 8
+    assert "tolerations" not in value["spec"]["template"]["spec"]
+
+
+def test_training_and_serving_can_tolerate_control_plane_taints() -> None:
+    training = render_training_job(
+        "review-a",
+        "ai-workflows",
+        "reviewer:v1",
+        "workspace",
+        "/workspace/configs/a.json",
+        8,
+        "accelerator",
+        "h200",
+        "Never",
+        digest("a"),
+        True,
+    )
+    serving = render_serving(
+        release(),
+        "code-reviewer-c",
+        "ai-workflows",
+        "registry.example/vllm@" + digest("2"),
+        "registry.example/verifier@" + digest("3"),
+        "workspace",
+        1,
+        "accelerator",
+        "h200",
+        True,
+    )
+    expected = [
+        {
+            "key": "node-role.kubernetes.io/control-plane",
+            "operator": "Exists",
+            "effect": "NoSchedule",
+        },
+        {
+            "key": "node-role.kubernetes.io/master",
+            "operator": "Exists",
+            "effect": "NoSchedule",
+        },
+    ]
+    assert training["spec"]["template"]["spec"]["tolerations"] == expected
+    assert serving["spec"]["predictor"]["tolerations"] == expected

@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 from ai_build_tools_k8s.code_review_agent import validate_candidate_fix
 from ai_build_tools_k8s.code_review_model import ContractError, load_json, require, require_image
-from ai_build_tools_k8s.workflow import write_json
+from ai_build_tools_k8s.workflow import add_control_plane_tolerations, write_json
 
 
 DNS_EGRESS = [
@@ -27,7 +27,9 @@ def dns_label(value: str) -> str:
 def validate_source_lock(lock: dict[str, Any]) -> dict[str, Any]:
     repository = str(lock.get("repository", ""))
     parsed = urlparse(repository)
-    require(parsed.scheme == "https" and parsed.netloc, "repository must use public HTTPS")
+    require(parsed.scheme == "https" and parsed.hostname, "repository must use public HTTPS")
+    require(parsed.username is None and parsed.password is None, "repository URL cannot contain credentials")
+    require(not parsed.query and not parsed.fragment, "repository URL cannot contain a query or fragment")
     commit = str(lock.get("commit", ""))
     require(len(commit) == 40 and all(character in "0123456789abcdef" for character in commit), "invalid commit")
     require(isinstance(lock.get("id"), str) and lock["id"], "source lock id is required")
@@ -140,6 +142,7 @@ def job(
     network_stage: str,
     timeout_seconds: int,
     script_config_map: str = "",
+    tolerate_control_plane: bool = False,
 ) -> dict[str, Any]:
     mounts = [
         {"name": "workspace", "mountPath": "/workspace"},
@@ -154,6 +157,31 @@ def job(
     if script_config_map:
         mounts.append({"name": "script", "mountPath": "/opt/review", "readOnly": True})
         volumes.append({"name": "script", "configMap": {"name": script_config_map, "defaultMode": 365}})
+    pod_spec: dict[str, Any] = {
+        "restartPolicy": "Never",
+        "automountServiceAccountToken": False,
+        "securityContext": pod_security(),
+        "containers": [
+            {
+                "name": "runner",
+                "image": image,
+                "imagePullPolicy": "IfNotPresent",
+                "command": command,
+                "env": [
+                    {"name": "HOME", "value": "/home/sandbox"},
+                    {"name": "XDG_CACHE_HOME", "value": "/workspace/.cache"},
+                ],
+                "resources": {
+                    "requests": {"cpu": "1", "memory": "1Gi"},
+                    "limits": {"cpu": "8", "memory": "16Gi"},
+                },
+                "securityContext": container_security(),
+                "volumeMounts": mounts,
+            }
+        ],
+        "volumes": volumes,
+    }
+    add_control_plane_tolerations(pod_spec, tolerate_control_plane)
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
@@ -168,30 +196,7 @@ def job(
                         "ai-k8s-tools.ricolin.dev/network-stage": network_stage,
                     }
                 },
-                "spec": {
-                    "restartPolicy": "Never",
-                    "automountServiceAccountToken": False,
-                    "securityContext": pod_security(),
-                    "containers": [
-                        {
-                            "name": "runner",
-                            "image": image,
-                            "imagePullPolicy": "IfNotPresent",
-                            "command": command,
-                            "env": [
-                                {"name": "HOME", "value": "/home/sandbox"},
-                                {"name": "XDG_CACHE_HOME", "value": "/workspace/.cache"},
-                            ],
-                            "resources": {
-                                "requests": {"cpu": "1", "memory": "1Gi"},
-                                "limits": {"cpu": "8", "memory": "16Gi"},
-                            },
-                            "securityContext": container_security(),
-                            "volumeMounts": mounts,
-                        }
-                    ],
-                    "volumes": volumes,
-                },
+                "spec": pod_spec,
             },
         },
     }
@@ -204,6 +209,7 @@ def render_bundle(
     pvc: str,
     storage_class: str,
     candidate_fix: dict[str, Any] | None = None,
+    tolerate_control_plane: bool = False,
 ) -> dict[str, Any]:
     validate_source_lock(lock)
     validate_profile(profile)
@@ -307,6 +313,7 @@ def render_bundle(
             "fetch",
             int(profile["timeout_seconds"]),
             f"{profile_name}-fetch",
+            tolerate_control_plane,
         ),
         "prepare-job.json": job(
             namespace,
@@ -317,6 +324,7 @@ def render_bundle(
             "prepare",
             int(profile["timeout_seconds"]),
             f"{profile_name}-prepare",
+            tolerate_control_plane,
         ),
         "test-job.json": job(
             namespace,
@@ -327,6 +335,7 @@ def render_bundle(
             "test",
             int(profile["timeout_seconds"]),
             f"{profile_name}-test",
+            tolerate_control_plane,
         ),
         "result-contract.json": {
             "schema_version": "1.0.0",
@@ -354,6 +363,7 @@ def main() -> None:
     parser.add_argument("--pvc", required=True)
     parser.add_argument("--storage-class", default="")
     parser.add_argument("--candidate-response", default="")
+    parser.add_argument("--tolerate-control-plane", action="store_true")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     try:
@@ -369,6 +379,7 @@ def main() -> None:
             args.pvc,
             args.storage_class,
             candidate_fix,
+            args.tolerate_control_plane,
         )
         output = Path(args.output)
         output.mkdir(parents=True, exist_ok=True)

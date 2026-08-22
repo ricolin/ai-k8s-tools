@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from ai_build_tools_k8s.code_review_sandbox import render_bundle
+import pytest
+
+from ai_build_tools_k8s.code_review_model import ContractError
+from ai_build_tools_k8s.code_review_sandbox import render_bundle, validate_source_lock
 
 
 def image(character: str) -> str:
@@ -48,3 +51,37 @@ def test_sandbox_separates_networked_prepare_from_offline_patch_test() -> None:
     for name in ("fetch-job.json", "prepare-job.json", "test-job.json"):
         container = bundle[name]["spec"]["template"]["spec"]["containers"][0]
         assert container["imagePullPolicy"] == "IfNotPresent"
+        assert "tolerations" not in bundle[name]["spec"]["template"]["spec"]
+
+
+def test_sandbox_can_tolerate_control_plane_taints() -> None:
+    source = {"id": "repo-1", "repository": "https://github.com/example/project", "commit": "a" * 40}
+    profile = {
+        "schema_version": "1.0.0",
+        "id": "python-unit",
+        "fetch_image": image("a"),
+        "runner_image": image("b"),
+        "prepare_commands": [],
+        "test_commands": [["python", "-m", "pytest"]],
+        "timeout_seconds": 1800,
+    }
+    bundle = render_bundle(source, profile, "review-run", "review-workspace", "local-path", None, True)
+    for name in ("fetch-job.json", "prepare-job.json", "test-job.json"):
+        tolerations = bundle[name]["spec"]["template"]["spec"]["tolerations"]
+        assert [item["key"] for item in tolerations] == [
+            "node-role.kubernetes.io/control-plane",
+            "node-role.kubernetes.io/master",
+        ]
+
+
+@pytest.mark.parametrize(
+    "repository",
+    [
+        "https://user:password@github.com/example/project",
+        "https://github.com/example/project?token=value",
+        "https://github.com/example/project#fragment",
+    ],
+)
+def test_source_lock_rejects_url_metadata(repository: str) -> None:
+    with pytest.raises(ContractError, match="credentials|query or fragment"):
+        validate_source_lock({"id": "repo-1", "repository": repository, "commit": "a" * 40})

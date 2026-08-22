@@ -14,6 +14,25 @@ from pathlib import Path
 from typing import Any
 
 
+CONTROL_PLANE_TOLERATIONS = (
+    {
+        "key": "node-role.kubernetes.io/control-plane",
+        "operator": "Exists",
+        "effect": "NoSchedule",
+    },
+    {
+        "key": "node-role.kubernetes.io/master",
+        "operator": "Exists",
+        "effect": "NoSchedule",
+    },
+)
+
+
+def add_control_plane_tolerations(pod_spec: dict[str, Any], enabled: bool) -> None:
+    if enabled:
+        pod_spec["tolerations"] = [dict(toleration) for toleration in CONTROL_PLANE_TOLERATIONS]
+
+
 def canonical_json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
 

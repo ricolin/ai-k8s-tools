@@ -148,6 +148,26 @@ def test_parse_intent_supports_simple_review_commands(text: str, mode: str, lang
     assert intent["scope"]["languages"] == languages
     assert intent["publish"] is False
     assert intent["retain_resources"] is True
+    assert intent["target_type"] == "repository"
+    assert intent["pull_request_number"] is None
+
+
+def test_parse_intent_supports_github_pull_request() -> None:
+    intent = parse_intent(
+        "go review https://github.com/ricolin/ai-build-tools/pull/42 on the python and yaml files "
+        "and provide fix until all reviews are green"
+    )
+
+    assert intent["repository"] == "https://github.com/ricolin/ai-build-tools.git"
+    assert intent["target_type"] == "pull_request"
+    assert intent["pull_request_number"] == 42
+    assert intent["scope"]["languages"] == ["python", "yaml"]
+    assert intent["mode"] == "fix-until-green"
+
+
+def test_parse_intent_rejects_unsupported_target() -> None:
+    with pytest.raises(ContractError, match="unsupported review request"):
+        parse_intent("go review https://example.com/ricolin/ai-build-tools")
 
 
 def test_evaluate_green_requires_tests_and_clean_final_review() -> None:
@@ -186,3 +206,12 @@ def test_candidate_fix_rejects_missing_terminal_newline() -> None:
 
     with pytest.raises(ContractError, match="must end with a newline"):
         validate_candidate_fix(invalid)
+
+
+@pytest.mark.parametrize("field", ["tests", "unknowns"])
+def test_response_rejects_invalid_review_list_items(field: str) -> None:
+    invalid = response()
+    invalid["review"][field] = [""]
+
+    with pytest.raises(ContractError, match=f"review {field} contain"):
+        validate_response(invalid, release(), packet())

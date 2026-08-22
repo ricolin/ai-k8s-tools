@@ -25,6 +25,10 @@ kubernetes/tools/ai-workflow code-agent parse-intent \
 kubernetes/tools/ai-workflow code-agent parse-intent \
   --text 'go review https://github.com/ricolin/ai-build-tools/ and provide fix until all your review green' \
   --output intent.json
+
+kubernetes/tools/ai-workflow code-agent parse-intent \
+  --text 'go review https://github.com/ricolin/ai-build-tools/pull/42 on the python and yaml files' \
+  --output intent.json
 ```
 
 The parser canonicalizes the clone URL, selects the Bash/Python/Go/Rust/YAML
@@ -32,7 +36,8 @@ path scope, and chooses either `review-only` or `fix-until-green`. Fix mode is
 capped at five iterations, retains every attempt, and sets `publish=false`.
 It does not trust a moving branch: the controller must still resolve a full
 40-character commit and select an operator-approved test profile before asking
-the model to review anything.
+the model to review anything. A pull-request URL is reduced to its base clone
+URL while the immutable pull-request number remains explicit in the intent.
 
 ## Inputs
 
@@ -79,8 +84,12 @@ kubernetes/tools/ai-workflow code-sandbox \
   --namespace code-review-RUN_ID \
   --pvc review-workspace \
   --storage-class local-path \
+  --tolerate-control-plane \
   --output sandbox
 ```
+
+Use `--tolerate-control-plane` only for a cluster where the intended sandbox
+node is also a control-plane node. It is disabled by default.
 
 The bundle contains a restricted namespace, RWO workspace PVC, default-deny
 network policies, a pinned checkout Job, profile preparation Job, offline
@@ -178,7 +187,3 @@ the workflow does not commit, push, comment, or create a pull request.
 An accepted run produces a review report plus a test-passing `fix.patch`.
 Applying that patch to another checkout, committing it, pushing it, or posting
 it to GitHub remains an explicit operator action outside this workflow.
-
-The earlier security-adviser and security-research workflows remain available
-in [security-agent-workflow.md](security-agent-workflow.md). They use different
-model identities, datasets, contracts, evidence, and agents.

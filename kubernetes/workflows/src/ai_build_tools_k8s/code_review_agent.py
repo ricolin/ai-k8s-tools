@@ -76,6 +76,11 @@ def validate_review(review: dict[str, Any], evidence_ids: set[str]) -> dict[str,
     require(isinstance(review["summary"], str) and review["summary"], "review summary is required")
     require(isinstance(review["tests"], list), "review tests must be a list")
     require(isinstance(review["unknowns"], list), "review unknowns must be a list")
+    require(all(isinstance(item, str) and item for item in review["tests"]), "review tests contain an invalid item")
+    require(
+        all(isinstance(item, str) and item for item in review["unknowns"]),
+        "review unknowns contain an invalid item",
+    )
     findings = review["findings"]
     require(isinstance(findings, list), "review findings must be a list")
     finding_ids: set[str] = set()
@@ -129,18 +134,21 @@ def validate_candidate_fix(fix: dict[str, Any]) -> dict[str, Any]:
 def parse_intent(text: str) -> dict[str, Any]:
     normalized = " ".join(text.strip().split())
     match = re.fullmatch(
-        r"go review (https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/?)(?: on the (.+?))?"
+        r"go review (https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?"
+        r"(?:/pull/([1-9][0-9]*))?/?)(?: on the (.+?))?"
         r"(?: and provide (?:a )?fix until all (?:your )?reviews? (?:is |are )?green)?",
         normalized,
         flags=re.IGNORECASE,
     )
     require(match is not None, "unsupported review request")
-    repository = match.group(1).rstrip("/")
+    requested_target = match.group(1).rstrip("/")
+    pull_request_number = int(match.group(2)) if match.group(2) else None
+    repository = re.sub(r"/pull/[1-9][0-9]*$", "", requested_target, flags=re.IGNORECASE)
     if repository.endswith(".git"):
         repository = repository[:-4]
     repository += ".git"
 
-    scope_text = (match.group(2) or "").lower()
+    scope_text = (match.group(3) or "").lower()
     selected = [language for language in SUPPORTED_SCOPE_PATHS if language in scope_text]
     require(not scope_text or selected, "scope must name bash, python, go, rust, or yaml")
     fix_until_green = bool(re.search(r" provide (?:a )?fix until all ", normalized, flags=re.IGNORECASE))
@@ -149,7 +157,8 @@ def parse_intent(text: str) -> dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "request": normalized,
         "repository": repository,
-        "target_type": "repository",
+        "target_type": "pull_request" if pull_request_number is not None else "repository",
+        "pull_request_number": pull_request_number,
         "scope": {
             "languages": languages,
             "path_globs": [path for language in languages for path in SUPPORTED_SCOPE_PATHS[language]],

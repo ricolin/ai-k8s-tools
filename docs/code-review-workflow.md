@@ -1,9 +1,9 @@
 # H200 Code-Review Model Workflow
 
 This workflow specializes a frozen causal-language foundation into a code
-reviewer for Bash, Python, Go, Rust, and YAML. It reuses the proven offline
-eight-GPU LoRA engine while keeping its dataset, contracts, evaluator, release,
-and serving identity separate from the retained security-adviser workflow.
+reviewer for Bash, Python, Go, Rust, and YAML. It uses the offline eight-GPU
+LoRA engine with a dedicated dataset, contract, evaluator, release, and serving
+identity.
 
 ## Release Progression
 
@@ -70,8 +70,12 @@ kubernetes/tools/ai-workflow code-review render-training-job \
   --gpu-count 8 \
   --node-selector-key ai-build-tools.ricolin.dev/accelerator \
   --node-selector-value nvidia-h200 \
+  --tolerate-control-plane \
   --output evidence/release-a-job.json
 ```
+
+Use `--tolerate-control-plane` only when the selected GPU node is intentionally
+also a Kubernetes control-plane node. The option defaults to disabled.
 
 Apply only after `kubectl apply --dry-run=server` succeeds. Require
 `world_size: 8`, eight unique H200 rank identities, the expected
@@ -107,6 +111,7 @@ kubernetes/tools/ai-workflow code-review render-serving \
   --gpu-count 1 \
   --node-selector-key ai-build-tools.ricolin.dev/accelerator \
   --node-selector-value nvidia-h200 \
+  --tolerate-control-plane \
   --output evidence/code-reviewer-c-inferenceservice.json
 ```
 

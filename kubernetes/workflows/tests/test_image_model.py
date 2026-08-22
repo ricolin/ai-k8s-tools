@@ -71,12 +71,32 @@ def test_image_jobs_have_explicit_gpu_scope_and_offline_inputs() -> None:
     assert train_container["resources"]["limits"]["nvidia.com/gpu"] == 8
     assert generate_container["resources"]["limits"]["nvidia.com/gpu"] == 1
     assert training["spec"]["template"]["spec"]["automountServiceAccountToken"] is False
+    assert "tolerations" not in training["spec"]["template"]["spec"]
     assert {item["name"]: item["value"] for item in train_container["env"]}["HF_HUB_OFFLINE"] == "1"
     assert {item["name"]: item for item in training["spec"]["template"]["spec"]["volumes"]}["dshm"] == {
         "name": "dshm",
         "emptyDir": {"medium": "Memory", "sizeLimit": "32Gi"},
     }
     assert {item["mountPath"] for item in train_container["volumeMounts"]} == {"/workspace", "/dev/shm"}
+
+
+def test_image_job_can_tolerate_control_plane_taints() -> None:
+    job = render_image_job(
+        "image-a",
+        "ai-workflows",
+        "registry.example/image@" + digest("a"),
+        "workspace",
+        "/workspace/config/A.json",
+        8,
+        "train",
+        "accelerator",
+        "h200",
+        tolerate_control_plane=True,
+    )
+    assert [item["key"] for item in job["spec"]["template"]["spec"]["tolerations"]] == [
+        "node-role.kubernetes.io/control-plane",
+        "node-role.kubernetes.io/master",
+    ]
 
 
 def test_node_local_image_requires_never_and_records_runtime_id() -> None:
