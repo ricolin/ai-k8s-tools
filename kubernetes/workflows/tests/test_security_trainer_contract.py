@@ -257,6 +257,9 @@ def test_evaluator_normalizer_collapses_only_identical_duplicate_keys() -> None:
         '"stop_conditions":["timeout"],"cleanup":["none"]},'
         '"prohibited_inferences":["impact"]}'
     )
+    assert evaluator.contract_errors(response) == [
+        "response contains duplicate JSON keys: timeout_seconds"
+    ]
     normalized, actions = evaluator.normalize_advisory(response)
     assert evaluator.contract_errors(normalized) == []
     assert actions == ["collapsed-identical-duplicate:timeout_seconds"]

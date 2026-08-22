@@ -73,8 +73,18 @@ def load_prompts(path: Path) -> list[dict[str, Any]]:
 
 
 def contract_errors(response: str) -> list[str]:
+    duplicate_keys: list[str] = []
+
+    def load_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        loaded: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in loaded:
+                duplicate_keys.append(key)
+            loaded[key] = value
+        return loaded
+
     try:
-        advisory = json.loads(response)
+        advisory = json.loads(response, object_pairs_hook=load_object)
     except json.JSONDecodeError:
         return ["response is not one JSON object"]
     if not isinstance(advisory, dict):
@@ -99,6 +109,11 @@ def contract_errors(response: str) -> list[str]:
         "cleanup",
     }
     errors = []
+    if duplicate_keys:
+        errors.append(
+            "response contains duplicate JSON keys: "
+            + ", ".join(sorted(set(duplicate_keys)))
+        )
     if set(advisory) != expected_fields:
         errors.append("top-level fields do not match the advisory contract")
     if advisory.get("schema_version") != "1.0.0":
