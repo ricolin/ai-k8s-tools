@@ -6,3 +6,4 @@ evidence/
 runs/
 *.env
 !*.env.example
+!**/source-lock.env
