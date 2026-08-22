@@ -6,7 +6,9 @@ required=(
   DEVICE_PLUGIN_DAEMONSET EXPECTED_GPU_NODES EXPECTED_GPU_COUNT_PER_NODE
   FULL_NODE_GPU_COUNT CUDA_SMOKE_IMAGE EVIDENCE_CONFIGMAP
   STAGE_TIMEOUT_SECONDS POLL_INTERVAL_SECONDS MINIMUM_KUBERNETES_MINOR
-  REQUIRE_LINUX_NODES REQUIRE_AMD64_NODES
+  REQUIRE_LINUX_NODES REQUIRE_AMD64_NODES CUDA_SMOKE_IMAGE_PULL_POLICY
+  SMOKE_NODE_SELECTOR_JSON SMOKE_TOLERATIONS_JSON
+  SMOKE_IMAGE_PULL_SECRETS_JSON
 )
 for name in "${required[@]}"; do
   [[ -n ${!name:-} ]] || { echo "missing required variable: ${name}" >&2; exit 2; }
@@ -90,10 +92,13 @@ spec:
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      nodeSelector: ${SMOKE_NODE_SELECTOR_JSON}
+      tolerations: ${SMOKE_TOLERATIONS_JSON}
+      imagePullSecrets: ${SMOKE_IMAGE_PULL_SECRETS_JSON}
       containers:
         - name: cuda-smoke
           image: ${CUDA_SMOKE_IMAGE}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: ${CUDA_SMOKE_IMAGE_PULL_POLICY}
           env:
             - name: EXPECTED_GPU_COUNT
               value: "${gpu_count}"

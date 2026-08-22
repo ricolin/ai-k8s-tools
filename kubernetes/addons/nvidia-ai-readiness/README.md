@@ -40,6 +40,9 @@ The orchestrator can create Jobs and update its evidence ConfigMap only in the
 release namespace. Its ClusterRole is read-only and limited to Nodes and the
 NVIDIA ClusterPolicy; device-plugin access is namespace scoped. All stages
 have explicit deadlines and the child Jobs consume no GPU after completion.
+The generated one-GPU and full-node CUDA Jobs inherit the readiness Pod's node
+selector, tolerations, image pull secrets, and pull policy. This is required
+when a reviewed GPU node is also a tainted Kubernetes control-plane node.
 Evidence includes the requested content-addressed images, the readiness Pod's
 observed runtime `imageID`, GPU Operator Pod runtime `imageID` values, node GPU
 capacity, ClusterPolicy state, and both CUDA test logs.

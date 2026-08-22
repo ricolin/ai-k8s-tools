@@ -53,6 +53,14 @@ for kube_version in 1.32.10 1.34.8; do
     -f "${chart_dir}/profiles/managed-driver-values.yaml" \
     --set "readiness.orchestratorImage=${orchestrator}" \
     --set "readiness.cudaSmokeImage=${cuda}" \
+    --set "readiness.nodeSelector.accelerator=nvidia-h200" \
+    --set "readiness.tolerations[0].key=node-role.kubernetes.io/control-plane" \
+    --set "readiness.tolerations[0].operator=Exists" \
+    --set "readiness.tolerations[0].effect=NoSchedule" \
+    --set "readiness.tolerations[1].key=node-role.kubernetes.io/master" \
+    --set "readiness.tolerations[1].operator=Exists" \
+    --set "readiness.tolerations[1].effect=NoSchedule" \
+    --set "readiness.imagePullSecrets[0].name=readiness-registry" \
     >"${temporary}/active-${kube_version}.yaml"
 done
 active_render="${temporary}/active-1.34.8.yaml"
@@ -71,6 +79,7 @@ grep -Fq 'enabled: false' "${active_render}"
 
 python3 - "${active_render}" <<'PY'
 import sys
+import json
 import yaml
 
 documents = [doc for doc in yaml.safe_load_all(open(sys.argv[1])) if doc]
@@ -87,6 +96,21 @@ environment = {
     item["name"]: item for item in container["env"]
 }
 assert environment["POD_NAME"]["valueFrom"]["fieldRef"]["fieldPath"] == "metadata.name"
+assert environment["CUDA_SMOKE_IMAGE_PULL_POLICY"]["value"] == "IfNotPresent"
+assert json.loads(environment["SMOKE_NODE_SELECTOR_JSON"]["value"]) == {
+    "accelerator": "nvidia-h200"
+}
+smoke_tolerations = {
+    item["key"]
+    for item in json.loads(environment["SMOKE_TOLERATIONS_JSON"]["value"])
+}
+assert {
+    "node-role.kubernetes.io/control-plane",
+    "node-role.kubernetes.io/master",
+} <= smoke_tolerations
+assert json.loads(environment["SMOKE_IMAGE_PULL_SECRETS_JSON"]["value"]) == [
+    {"name": "readiness-registry"}
+]
 
 cluster_role = next(
     doc for doc in documents
@@ -134,5 +158,12 @@ assert {
     "node-role.kubernetes.io/master",
 } <= nfd_gc_tolerations
 PY
+
+grep -Fq 'nodeSelector: ${SMOKE_NODE_SELECTOR_JSON}' \
+  "${chart_dir}/images/orchestrator/orchestrate.sh"
+grep -Fq 'tolerations: ${SMOKE_TOLERATIONS_JSON}' \
+  "${chart_dir}/images/orchestrator/orchestrate.sh"
+grep -Fq 'imagePullSecrets: ${SMOKE_IMAGE_PULL_SECRETS_JSON}' \
+  "${chart_dir}/images/orchestrator/orchestrate.sh"
 
 echo "PASS: NVIDIA add-on render contract"

@@ -63,6 +63,12 @@ A successful add-on release must retain the evidence ConfigMap and prove:
 - full-node CUDA allocation and memory operations; and
 - observed runtime image IDs for the readiness and GPU Operator Pods.
 
+The CUDA child Jobs inherit `readiness.nodeSelector`,
+`readiness.tolerations`, `readiness.imagePullSecrets`, and
+`readiness.imagePullPolicy` from their parent readiness contract. Configure
+those values whenever the accepted GPU nodes are tainted or require a private
+registry credential.
+
 Install the workspace and Kubeflow/KServe bundles only after this lifecycle
 gate passes. Their storage/data deletion paths remain separately controlled so
 cluster add-on deletion cannot silently remove retained model artifacts.

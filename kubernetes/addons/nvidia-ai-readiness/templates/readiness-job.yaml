@@ -65,6 +65,14 @@ spec:
               value: {{ .Values.readiness.fullNodeGpuCount | quote }}
             - name: CUDA_SMOKE_IMAGE
               value: {{ .Values.readiness.cudaSmokeImage | quote }}
+            - name: CUDA_SMOKE_IMAGE_PULL_POLICY
+              value: {{ .Values.readiness.imagePullPolicy | quote }}
+            - name: SMOKE_NODE_SELECTOR_JSON
+              value: {{ .Values.readiness.nodeSelector | toJson | quote }}
+            - name: SMOKE_TOLERATIONS_JSON
+              value: {{ .Values.readiness.tolerations | toJson | quote }}
+            - name: SMOKE_IMAGE_PULL_SECRETS_JSON
+              value: {{ .Values.readiness.imagePullSecrets | toJson | quote }}
             - name: ORCHESTRATOR_IMAGE_ID
               value: {{ .Values.readiness.orchestratorImage | quote }}
             - name: EVIDENCE_CONFIGMAP
