@@ -68,12 +68,98 @@ observed_commit=$(git -C "${source_dir}" rev-parse HEAD)
 printf '%s\n' "${observed_commit}" >"${evidence_dir}/kubeflow-source.commit"
 
 if ! ${kubectl} get storageclass "${STORAGE_CLASS}" >/dev/null 2>&1; then
+  [[ ${STORAGE_CLASS} == local-path ]] || {
+    echo "storage class does not exist: ${STORAGE_CLASS}" >&2
+    exit 1
+  }
   ${kubectl} apply -f \
     "https://raw.githubusercontent.com/rancher/local-path-provisioner/${LOCAL_PATH_PROVISIONER_VERSION}/deploy/local-path-storage.yaml"
 fi
 ${kubectl} annotate storageclass "${STORAGE_CLASS}" \
   storageclass.kubernetes.io/is-default-class=true --overwrite
-${kubectl} -n local-path-storage rollout status deployment/local-path-provisioner --timeout=300s
+storage_provisioner=$(${kubectl} get storageclass "${STORAGE_CLASS}" \
+  -o jsonpath='{.provisioner}')
+
+if [[ ${storage_provisioner} == rancher.io/local-path ]]; then
+  ${kubectl} -n local-path-storage rollout status \
+    deployment/local-path-provisioner --timeout=300s
+
+  # The upstream manifest uses mutable busybox:latest for helper Pods. Pin it
+  # before Kubeflow queues large control-plane image pulls on a one-node cluster.
+  helper_pod_yaml=$(${kubectl} -n local-path-storage get configmap local-path-config \
+    -o jsonpath='{.data.helperPod\.yaml}')
+  helper_pod_yaml=$(printf '%s\n' "${helper_pod_yaml}" |
+    sed -E "s#(^[[:space:]]*image:[[:space:]]*).*busybox[^[:space:]]*#\\1${LOCAL_PATH_HELPER_IMAGE}#")
+  grep -Fq "image: ${LOCAL_PATH_HELPER_IMAGE}" <<<"${helper_pod_yaml}" || {
+    echo "failed to pin the local-path helper image" >&2
+    exit 1
+  }
+  helper_patch=$(jq -cn --arg manifest "${helper_pod_yaml}" \
+    '{data: {"helperPod.yaml": $manifest}}')
+  ${kubectl} -n local-path-storage patch configmap local-path-config \
+    --type=merge -p "${helper_patch}"
+  ${kubectl} -n local-path-storage rollout restart deployment/local-path-provisioner
+  ${kubectl} -n local-path-storage rollout status \
+    deployment/local-path-provisioner --timeout=300s
+fi
+
+storage_probe=ai-build-tools-storage-preflight
+storage_probe_namespace=${STORAGE_PROBE_NAMESPACE:-default}
+${kubectl} -n "${storage_probe_namespace}" delete pod "${storage_probe}" \
+  --ignore-not-found --wait=true
+${kubectl} -n "${storage_probe_namespace}" delete pvc "${storage_probe}" \
+  --ignore-not-found --wait=true
+cat <<EOF | ${kubectl} apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${storage_probe}
+  namespace: ${storage_probe_namespace}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ${STORAGE_CLASS}
+  resources:
+    requests:
+      storage: 1Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${storage_probe}
+  namespace: ${storage_probe_namespace}
+spec:
+  restartPolicy: Never
+  containers:
+    - name: storage-probe
+      image: ${LOCAL_PATH_HELPER_IMAGE}
+      command: ["/bin/sh", "-ceu"]
+      args:
+        - |
+          printf 'local-path-ready\n' >/data/probe
+          sync
+          sleep 600
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ${storage_probe}
+EOF
+${kubectl} -n "${storage_probe_namespace}" wait --for=condition=Ready \
+  "pod/${storage_probe}" --timeout=300s
+${kubectl} -n "${storage_probe_namespace}" exec \
+  "pod/${storage_probe}" -- cat /data/probe |
+  tee "${evidence_dir}/storage-preflight.txt"
+${kubectl} -n "${storage_probe_namespace}" get pvc "${storage_probe}" -o yaml \
+  >"${evidence_dir}/storage-preflight-pvc.yaml"
+probe_pv=$(${kubectl} -n "${storage_probe_namespace}" get pvc "${storage_probe}" \
+  -o jsonpath='{.spec.volumeName}')
+${kubectl} get pv "${probe_pv}" -o yaml \
+  >"${evidence_dir}/storage-preflight-pv.yaml"
+${kubectl} -n "${storage_probe_namespace}" delete pod "${storage_probe}" --wait=true
+${kubectl} -n "${storage_probe_namespace}" delete pvc "${storage_probe}" --wait=true
 
 cd "${source_dir}"
 ${kustomize} build common/kubeflow-namespace/base | ${kubectl} apply -f -
@@ -83,6 +169,24 @@ ${kustomize} build applications/pipeline/upstream/cluster-scoped-resources |
 ${kubectl} wait --for=condition=Established crd/applications.app.k8s.io --timeout=120s
 ${kustomize} build applications/pipeline/upstream/env/platform-agnostic |
   ${kubectl} apply --server-side --force-conflicts -f -
+
+# Envoy otherwise derives one worker per visible CPU. Large GPU hosts can then
+# exhaust the container's open-file limit before the metadata proxy starts.
+envoy_container=$(${kubectl} -n kubeflow get deployment metadata-envoy-deployment \
+  -o jsonpath='{.spec.template.spec.containers[0].name}')
+envoy_config=$(${kubectl} -n kubeflow get deployment metadata-envoy-deployment \
+  -o jsonpath='{.spec.template.spec.containers[0].args[0]}')
+envoy_patch=$(jq -cn \
+  --arg name "${envoy_container}" \
+  --arg config "${envoy_config}" \
+  --arg concurrency "${METADATA_ENVOY_CONCURRENCY}" \
+  '{spec: {template: {spec: {containers: [{name: $name, args: [$config, "--concurrency", $concurrency]}]}}}}')
+${kubectl} -n kubeflow patch deployment metadata-envoy-deployment \
+  --type=strategic -p "${envoy_patch}"
+${kubectl} -n kubeflow rollout status deployment/metadata-envoy-deployment --timeout=300s
+${kubectl} -n kubeflow get deployment metadata-envoy-deployment -o yaml \
+  >"${evidence_dir}/metadata-envoy-deployment.yaml"
+
 ${kubectl} wait -n kubeflow --for=condition=Available deployment/mysql --timeout=900s
 ${kubectl} wait -n kubeflow --for=condition=Available deployment/seaweedfs --timeout=900s
 ${kubectl} wait -n kubeflow --for=condition=Available deployment/ml-pipeline --timeout=900s
@@ -115,7 +219,15 @@ for attempt in 1 2 3; do
     break
   fi
   [[ ${attempt} -lt 3 ]] || exit 1
-  ${kubectl} wait -n kubeflow --for=condition=Ready pod --all --timeout=120s || true
+  for crd in \
+    inferenceservices.serving.kserve.io \
+    servingruntimes.serving.kserve.io \
+    clusterservingruntimes.serving.kserve.io; do
+    ${kubectl} wait --for=condition=Established "crd/${crd}" --timeout=120s
+  done
+  ${kubectl} wait -n kubeflow --for=condition=Available \
+    deployment/kserve-controller-manager --timeout=600s
+  sleep 5
 done
 ${kubectl} wait --for=condition=Established crd/inferenceservices.serving.kserve.io --timeout=120s
 ${kubectl} wait -n kubeflow --for=condition=Available deployment/kserve-controller-manager --timeout=600s

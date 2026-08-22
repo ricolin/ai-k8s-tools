@@ -94,6 +94,7 @@ kubernetes/
 - KServe `0.18.0`
 - cert-manager `1.20.2`
 - local-path-provisioner `v0.0.37` for disposable environments
+- BusyBox `1.36.1` for the pinned local-path helper and storage preflight
 - Kustomize `v5.8.1`
 - uv `0.10.9`
 
@@ -149,9 +150,16 @@ EVIDENCE_DIR=$PWD/evidence/platform \
 
 The installer verifies the pinned source commit before rendering it, installs
 the minimal KFP, Hub, cert-manager, KServe, and storage set, and waits for the
-required deployments. The included local-path StorageClass is suitable for
-disposable validation only. Production deployments must select durable
-storage and backup policies.
+required deployments. Before applying Kubeflow, it pins the local-path helper
+image and proves dynamic provisioning with a temporary PVC and mounted probe
+Pod. It also caps the KFP metadata Envoy at four workers so hosts with a large
+CPU count do not exhaust the container open-file limit. KServe retries wait on
+its own CRDs and controller instead of unrelated namespace Pods.
+
+The included local-path StorageClass is suitable for disposable validation
+only. Production deployments must select durable storage and backup policies.
+Successful installation records the storage probe and rendered metadata Envoy
+deployment under `EVIDENCE_DIR`.
 
 ## mCAPI mechanics example
 
