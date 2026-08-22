@@ -12,6 +12,13 @@ from ai_build_tools_k8s.workflow import canonical_json, write_json
 
 
 SCHEMA_VERSION = "1.0.0"
+SUPPORTED_SCOPE_PATHS = {
+    "bash": ["**/*.sh", "**/*.bash"],
+    "go": ["**/*.go"],
+    "python": ["**/*.py"],
+    "rust": ["**/*.rs"],
+    "yaml": ["**/*.yaml", "**/*.yml"],
+}
 REVIEW_FIELDS = {"schema_version", "summary", "verdict", "findings", "tests", "unknowns"}
 FINDING_FIELDS = {
     "id",
@@ -119,6 +126,70 @@ def validate_candidate_fix(fix: dict[str, Any]) -> dict[str, Any]:
     return fix
 
 
+def parse_intent(text: str) -> dict[str, Any]:
+    normalized = " ".join(text.strip().split())
+    match = re.fullmatch(
+        r"go review (https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/?)(?: on the (.+?))?"
+        r"(?: and provide (?:a )?fix until all (?:your )?reviews? (?:is |are )?green)?",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    require(match is not None, "unsupported review request")
+    repository = match.group(1).rstrip("/")
+    if repository.endswith(".git"):
+        repository = repository[:-4]
+    repository += ".git"
+
+    scope_text = (match.group(2) or "").lower()
+    selected = [language for language in SUPPORTED_SCOPE_PATHS if language in scope_text]
+    require(not scope_text or selected, "scope must name bash, python, go, rust, or yaml")
+    fix_until_green = bool(re.search(r" provide (?:a )?fix until all ", normalized, flags=re.IGNORECASE))
+    languages = selected or sorted(SUPPORTED_SCOPE_PATHS)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "request": normalized,
+        "repository": repository,
+        "target_type": "repository",
+        "scope": {
+            "languages": languages,
+            "path_globs": [path for language in languages for path in SUPPORTED_SCOPE_PATHS[language]],
+        },
+        "mode": "fix-until-green" if fix_until_green else "review-only",
+        "max_iterations": 5 if fix_until_green else 1,
+        "green_gate": {
+            "patch_applies": True,
+            "selected_profile_passes": True,
+            "final_verdicts": ["APPROVE", "COMMENT"],
+            "remaining_findings": 0,
+        },
+        "controller_requirements": ["resolve_exact_source_commit", "select_operator_approved_test_profile"],
+        "retain_resources": True,
+        "publish": False,
+    }
+
+
+def evaluate_green(response: dict[str, Any], result_env: str) -> dict[str, Any]:
+    values = dict(
+        line.split("=", 1)
+        for line in result_env.splitlines()
+        if line and "=" in line
+    )
+    review = response.get("review", {})
+    fix = response.get("candidate_fix", {})
+    checks = {
+        "unit_test_status_zero": values.get("UNIT_TEST_STATUS") == "0",
+        "source_commit_recorded": bool(re.fullmatch(r"[0-9a-f]{40}", values.get("SOURCE_COMMIT", ""))),
+        "final_verdict_green": review.get("verdict") in {"APPROVE", "COMMENT"},
+        "remaining_findings_zero": review.get("findings") == [],
+        "no_additional_fix_requested": fix.get("status") == "NOT_NEEDED",
+    }
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "status": "GREEN" if all(checks.values()) else "CONTINUE",
+        "checks": checks,
+    }
+
+
 def validate_response(response: dict[str, Any], release: dict[str, Any], packet: dict[str, Any]) -> dict[str, Any]:
     validate_release(release)
     index = validate_packet(packet)
@@ -177,7 +248,8 @@ def make_request(release: dict[str, Any], packet: dict[str, Any]) -> dict[str, A
         "Prioritize correctness, regressions, compatibility, reliability, "
         "and missing tests over style. Never invent a file, line, test result, repository identity, or pull-request fact. "
         "When a concrete fix is justified, candidate_fix may contain one bounded text-only git unified diff for observed "
-        "paths. The execution plan may select only supplied profile IDs and typed tools. Never emit a shell command, "
+        "implementation and test paths. Add or update a focused unit test when supplied evidence shows coverage is missing. "
+        "The execution plan may select only supplied profile IDs and typed tools. Never emit a shell command, "
         "script, credential, commit, push, issue, pull-request action, or publication action. The broker applies a proposed "
         "patch only in a disposable sandbox, runs operator-owned unit-test profiles without test-stage egress, and exports "
         "the resulting patch and report without modifying the upstream checkout."
@@ -261,6 +333,15 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--packet", required=True)
     validate.add_argument("--response", required=True)
 
+    intent = commands.add_parser("parse-intent")
+    intent.add_argument("--text", required=True)
+    intent.add_argument("--output", required=True)
+
+    gate = commands.add_parser("evaluate-green")
+    gate.add_argument("--response", required=True)
+    gate.add_argument("--result-env", required=True)
+    gate.add_argument("--output", required=True)
+
     execute = commands.add_parser("run")
     execute.add_argument("--release", required=True)
     execute.add_argument("--packet", required=True)
@@ -276,6 +357,13 @@ def main() -> None:
     try:
         if args.command == "create-request":
             write_json(Path(args.output), make_request(load_json(Path(args.release)), load_json(Path(args.packet))))
+        elif args.command == "parse-intent":
+            write_json(Path(args.output), parse_intent(args.text))
+        elif args.command == "evaluate-green":
+            write_json(
+                Path(args.output),
+                evaluate_green(load_json(Path(args.response)), Path(args.result_env).read_text()),
+            )
         elif args.command == "validate-response":
             validate_response(
                 load_json(Path(args.response)),

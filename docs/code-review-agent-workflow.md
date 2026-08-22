@@ -9,6 +9,31 @@ The agent never invents or executes shell commands. Commands and digest-pinned
 images live in the selected profile. The model can request patch application,
 tests, patch export, and report creation through typed tools only.
 
+## Plain-Text Entry Point
+
+The operator may start with one string:
+
+```bash
+kubernetes/tools/ai-workflow code-agent parse-intent \
+  --text 'go review https://github.com/ricolin/ai-build-tools/' \
+  --output intent.json
+
+kubernetes/tools/ai-workflow code-agent parse-intent \
+  --text 'go review https://github.com/ricolin/ai-build-tools/ on the bash scripts' \
+  --output intent.json
+
+kubernetes/tools/ai-workflow code-agent parse-intent \
+  --text 'go review https://github.com/ricolin/ai-build-tools/ and provide fix until all your review green' \
+  --output intent.json
+```
+
+The parser canonicalizes the clone URL, selects the Bash/Python/Go/Rust/YAML
+path scope, and chooses either `review-only` or `fix-until-green`. Fix mode is
+capped at five iterations, retains every attempt, and sets `publish=false`.
+It does not trust a moving branch: the controller must still resolve a full
+40-character commit and select an operator-approved test profile before asking
+the model to review anything.
+
 ## Inputs
 
 Prepare:
@@ -40,7 +65,9 @@ kubernetes/tools/ai-workflow code-agent validate-response \
 
 Validation rejects invented evidence/profile/repository IDs, unknown tools,
 arbitrary command fields, binary patches, renames, absolute paths, `.git`
-paths, parent traversal, and patches larger than 256 KiB.
+paths, parent traversal, unterminated diffs, and patches larger than 256 KiB.
+One candidate patch may update both implementation and focused unit-test files
+when those paths are present in the supplied evidence.
 
 ## Render The Sandbox
 
@@ -87,6 +114,34 @@ unit-test command without egress, and writes `fix.patch`, its digest,
 `unit-tests.log`, and `result.env` to the PVC. A failed Job is evidence that
 the candidate is not accepted; retain its logs and request a new model attempt
 against those supplied results.
+
+## Bounded Review-Fix-Test Loop
+
+For `fix-until-green`, use a new retained namespace/PVC for every iteration:
+
+1. validate the model response;
+2. run `git apply --check` against the exact source lock;
+3. run the selected profile in the no-egress test Job;
+4. supply parser, lint, unit-test, and patch-application failures as new
+   evidence to the next model request;
+5. after tests pass, ask Model C to review the exact exported patch and
+   observed test results;
+6. stop at five candidate iterations even when the result is not green.
+
+Evaluate the final gate with:
+
+```bash
+kubernetes/tools/ai-workflow code-agent evaluate-green \
+  --response final-response.json \
+  --result-env results/result.env \
+  --output green-gate.json
+jq -e '.status == "GREEN"' green-gate.json
+```
+
+`GREEN` requires `UNIT_TEST_STATUS=0`, a recorded 40-character source commit,
+final verdict `APPROVE` or `COMMENT`, zero remaining findings, and no further
+candidate fix. The selected profile defines what passed; do not describe a
+focused profile as the full repository suite.
 
 ## Export The Patch And Report
 

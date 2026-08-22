@@ -4,7 +4,13 @@ import json
 
 import pytest
 
-from ai_build_tools_k8s.code_review_agent import make_request, validate_candidate_fix, validate_response
+from ai_build_tools_k8s.code_review_agent import (
+    evaluate_green,
+    make_request,
+    parse_intent,
+    validate_candidate_fix,
+    validate_response,
+)
 from ai_build_tools_k8s.code_review_model import ContractError
 
 
@@ -107,12 +113,54 @@ def test_response_accepts_grounded_style_finding() -> None:
 
 
 def test_request_distinguishes_finding_and_evidence_ids() -> None:
-    payload = json.loads(make_request(release(), packet())["messages"][1]["content"])
+    request = make_request(release(), packet())
+    payload = json.loads(request["messages"][1]["content"])
 
     assert payload["contract"]["identifier_rules"] == {
         "finding.id": "reviewer-created label such as F1",
         "finding.evidence": "exact value from review_packet.reference_index.evidence_ids",
     }
+    assert "implementation and test paths" in request["messages"][0]["content"]
+
+
+@pytest.mark.parametrize(
+    ("text", "mode", "languages"),
+    [
+        ("go review https://github.com/ricolin/ai-build-tools/", "review-only", ["bash", "go", "python", "rust", "yaml"]),
+        ("go review https://github.com/ricolin/ai-build-tools/ on the bash scripts", "review-only", ["bash"]),
+        (
+            "go review https://github.com/ricolin/ai-build-tools/ and provide fix until all your review green",
+            "fix-until-green",
+            ["bash", "go", "python", "rust", "yaml"],
+        ),
+    ],
+)
+def test_parse_intent_supports_simple_review_commands(text: str, mode: str, languages: list[str]) -> None:
+    intent = parse_intent(text)
+
+    assert intent["repository"] == "https://github.com/ricolin/ai-build-tools.git"
+    assert intent["mode"] == mode
+    assert intent["scope"]["languages"] == languages
+    assert intent["publish"] is False
+    assert intent["retain_resources"] is True
+
+
+def test_evaluate_green_requires_tests_and_clean_final_review() -> None:
+    final = response()
+    final["review"]["verdict"] = "APPROVE"
+    final["review"]["findings"] = []
+    final["candidate_fix"] = {
+        "status": "NOT_NEEDED",
+        "patch_id": None,
+        "unified_diff": "",
+        "rationale": "No remaining findings",
+        "expected_tests": ["python-unit"],
+    }
+
+    result = evaluate_green(final, "UNIT_TEST_STATUS=0\nSOURCE_COMMIT=" + ("a" * 40) + "\n")
+
+    assert result["status"] == "GREEN"
+    assert all(result["checks"].values())
 
 
 def test_response_rejects_path_escape_and_unknown_profile() -> None:
