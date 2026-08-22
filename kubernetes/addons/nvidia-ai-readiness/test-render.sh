@@ -101,6 +101,38 @@ role = next(
     and doc.get("metadata", {}).get("name") == "active-nvidia-ai-readiness"
 )
 assert any("jobs" in rule["resources"] and "create" in rule["verbs"] for rule in role["rules"])
+daemonset_rule = next(
+    rule for rule in role["rules"] if "daemonsets" in rule["resources"]
+)
+assert set(daemonset_rule["verbs"]) == {"get", "list", "watch"}
+
+cluster_policy = next(
+    doc for doc in documents
+    if doc.get("kind") == "ClusterPolicy"
+    and doc.get("metadata", {}).get("name") == "cluster-policy"
+)
+operand_tolerations = {
+    item["key"] for item in cluster_policy["spec"]["daemonsets"]["tolerations"]
+}
+assert {
+    "node-role.kubernetes.io/control-plane",
+    "node-role.kubernetes.io/master",
+    "nvidia.com/gpu",
+} <= operand_tolerations
+
+nfd_gc = next(
+    doc for doc in documents
+    if doc.get("kind") == "Deployment"
+    and doc.get("metadata", {}).get("name")
+    == "active-node-feature-discovery-gc"
+)
+nfd_gc_tolerations = {
+    item["key"] for item in nfd_gc["spec"]["template"]["spec"]["tolerations"]
+}
+assert {
+    "node-role.kubernetes.io/control-plane",
+    "node-role.kubernetes.io/master",
+} <= nfd_gc_tolerations
 PY
 
 echo "PASS: NVIDIA add-on render contract"
