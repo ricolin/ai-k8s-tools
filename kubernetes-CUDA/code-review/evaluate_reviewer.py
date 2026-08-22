@@ -115,7 +115,9 @@ def evaluate(config_path: Path) -> None:
                 generated[0, inputs["input_ids"].shape[1] :],
                 skip_special_tokens=True,
             )
-            _, errors = validate_response_text(response)
+            parsed, errors = validate_response_text(response)
+            if parsed is not None:
+                response = canonical_json(parsed).decode()
             records.append(
                 {
                     "schema_version": "1.0.0",

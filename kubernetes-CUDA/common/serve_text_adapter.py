@@ -131,7 +131,7 @@ class TextAdapterServer:
             )
         generated_tokens = generated[0, inputs["input_ids"].shape[1] :]
         content = self.response_prefix + self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
-        parsed = json.loads(content)
+        parsed = json.loads(content, strict=False)
         require(isinstance(parsed, dict), "generated response must be one JSON object")
         compact = canonical_json(parsed).decode()
         return openai_response(

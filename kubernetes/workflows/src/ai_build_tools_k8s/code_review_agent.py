@@ -479,7 +479,10 @@ def make_request(release: dict[str, Any], packet: dict[str, Any]) -> dict[str, A
         "The execution plan may select only supplied profile IDs and typed tools. Never emit a shell command, "
         "script, credential, commit, push, issue, pull-request action, or publication action. The broker applies a proposed "
         "patch only in a disposable sandbox, runs operator-owned unit-test profiles without test-stage egress, and exports "
-        "the resulting patch and report without modifying the upstream checkout."
+        "the resulting patch and report without modifying the upstream checkout. Every task cleanup_required must be true. "
+        "pull_request_lock_id must be null when no pull-request lock is supplied. A proposed unified_diff must begin with "
+        "diff --git, contain --- and +++ headers, and end with a newline. Encode newlines inside JSON strings and keep "
+        "review.tests, review.unknowns, and candidate_fix.expected_tests as arrays of strings."
     )
     user = {
         "release": release,

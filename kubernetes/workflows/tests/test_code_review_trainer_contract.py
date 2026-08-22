@@ -40,6 +40,8 @@ def test_dataset_copies_distinct_reviewer_identities() -> None:
     assert first_user["release"]["adapter_digest"] != second_user["release"]["adapter_digest"]
     assert "exactly these top-level fields" in first["messages"][0]["content"]
     assert "no Markdown fences" in first["messages"][0]["content"]
+    assert "Every task cleanup_required must be true" in first["messages"][0]["content"]
+    assert "must begin with diff --git" in first["messages"][0]["content"]
 
 
 def test_quality_gate_rejects_wrong_reviewer_identity() -> None:
@@ -83,6 +85,28 @@ def test_quality_gate_accepts_schema_supported_style_category() -> None:
     _, errors = quality_gate.validate_response_text(json.dumps(answer))
 
     assert "finding category is invalid" not in errors
+
+
+def test_quality_gate_rejects_non_array_review_fields_and_unterminated_patch() -> None:
+    generated = generator.record("C", 0)
+    answer = json.loads(generated["messages"][2]["content"])
+    answer["review"]["tests"] = "not-an-array"
+    answer["candidate_fix"]["unified_diff"] = answer["candidate_fix"]["unified_diff"].rstrip("\n")
+
+    _, errors = quality_gate.validate_response_text(json.dumps(answer))
+
+    assert "review tests must be an array of strings" in errors
+    assert "proposed fix must end with a newline" in errors
+
+
+def test_quality_gate_canonicalizes_unescaped_string_newlines() -> None:
+    generated = generator.record("C", 0)
+    raw = generated["messages"][2]["content"].replace("\\n", "\n", 1)
+
+    value, errors = quality_gate.validate_response_text(raw)
+
+    assert value is not None
+    assert "response is not one JSON object" not in errors
 
 
 def test_comparison_prompts_match_live_request_shape() -> None:

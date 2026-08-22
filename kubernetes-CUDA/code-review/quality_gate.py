@@ -34,7 +34,7 @@ TOOL_ARGUMENT_KEYS = {
 
 def validate_response_text(raw: str) -> tuple[dict[str, Any] | None, list[str]]:
     try:
-        value = json.loads(raw)
+        value = json.loads(raw, strict=False)
     except json.JSONDecodeError:
         return None, ["response is not one JSON object"]
     errors: list[str] = []
@@ -48,6 +48,10 @@ def validate_response_text(raw: str) -> tuple[dict[str, Any] | None, list[str]]:
             errors.append("review schema is invalid")
         if review.get("verdict") not in {"APPROVE", "COMMENT", "REQUEST_CHANGES"}:
             errors.append("review verdict is invalid")
+        for field in ("tests", "unknowns"):
+            values = review.get(field)
+            if not isinstance(values, list) or not all(isinstance(item, str) for item in values):
+                errors.append(f"review {field} must be an array of strings")
         findings = review.get("findings")
         if not isinstance(findings, list):
             errors.append("findings must be a list")
@@ -67,20 +71,31 @@ def validate_response_text(raw: str) -> tuple[dict[str, Any] | None, list[str]]:
     fix = value.get("candidate_fix")
     if not isinstance(fix, dict) or set(fix) != FIX_FIELDS:
         errors.append("candidate fix fields do not match")
-    elif fix.get("status") == "PROPOSED":
+    else:
+        expected_tests = fix.get("expected_tests")
+        if not isinstance(expected_tests, list) or not all(isinstance(item, str) for item in expected_tests):
+            errors.append("candidate fix expected_tests must be an array of strings")
+    if isinstance(fix, dict) and set(fix) == FIX_FIELDS and fix.get("status") == "PROPOSED":
         patch = fix.get("unified_diff")
         if not isinstance(patch, str) or not re.search(r"^diff --git a/.+ b/.+$", patch, flags=re.MULTILINE):
             errors.append("proposed fix is not a unified diff")
         elif any(part in patch for part in ("../", "a/.git/", "b/.git/", "GIT binary patch", "Binary files ")):
             errors.append("proposed fix contains an unsafe path or binary patch")
-    elif fix.get("status") not in {"NOT_NEEDED", "BLOCKED"}:
+        elif not patch.endswith("\n"):
+            errors.append("proposed fix must end with a newline")
+    elif isinstance(fix, dict) and set(fix) == FIX_FIELDS and fix.get("status") not in {"NOT_NEEDED", "BLOCKED"}:
         errors.append("candidate fix status is invalid")
-    elif fix.get("patch_id") is not None or fix.get("unified_diff") != "":
+    elif isinstance(fix, dict) and set(fix) == FIX_FIELDS and (
+        fix.get("patch_id") is not None or fix.get("unified_diff") != ""
+    ):
         errors.append("non-proposed fix contains patch data")
     plan = value.get("execution_plan")
     if not isinstance(plan, dict) or set(plan) != PLAN_FIELDS:
         errors.append("execution plan fields do not match")
     else:
+        pull_request_lock_id = plan.get("pull_request_lock_id")
+        if pull_request_lock_id is not None and not isinstance(pull_request_lock_id, str):
+            errors.append("pull-request lock must be a string or null")
         tasks = plan.get("tasks")
         if not isinstance(tasks, list) or len(tasks) > 30:
             errors.append("execution plan task list is invalid")
