@@ -1,0 +1,103 @@
+name: NVIDIA AI readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish images and the Helm chart to GHCR
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920
+        with:
+          egress-policy: audit
+
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+        with:
+          version: v3.19.0
+
+      - name: Install render-test dependency
+        run: python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
+
+      - name: Validate portable contracts
+        run: |
+          ./kubernetes/addons/nvidia-ai-readiness/test-render.sh
+          ./kubernetes/bundles/workspace/test-render.sh
+          ./kubernetes/bundles/kubeflow-kserve/test-contract.sh
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+
+      - name: Log in to GHCR
+        if: inputs.publish
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build readiness images
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          source kubernetes/addons/nvidia-ai-readiness/images/source-lock.env
+          output=(--load)
+          if [[ ${PUBLISH} == true ]]; then
+            output=(--push)
+          fi
+          docker buildx build --platform linux/amd64 "${output[@]}" \
+            --build-arg BASE_IMAGE="${BASE_IMAGE}" \
+            --build-arg KUBECTL_VERSION="${KUBECTL_VERSION}" \
+            --build-arg KUBECTL_SHA256="${KUBECTL_SHA256}" \
+            --tag "${ORCHESTRATOR_IMAGE}:${NVIDIA_AI_READINESS_VERSION}" \
+            --file kubernetes/addons/nvidia-ai-readiness/images/orchestrator/Dockerfile \
+            .
+          docker buildx build --platform linux/amd64 "${output[@]}" \
+            --build-arg CUDA_DEVEL_IMAGE="${CUDA_DEVEL_IMAGE}" \
+            --build-arg CUDA_RUNTIME_IMAGE="${CUDA_RUNTIME_IMAGE}" \
+            --tag "${CUDA_SMOKE_IMAGE}:${NVIDIA_AI_READINESS_VERSION}" \
+            --file kubernetes/addons/nvidia-ai-readiness/images/cuda-smoke/Dockerfile \
+            .
+
+      - name: Package and publish readiness chart
+        env:
+          PUBLISH: ${{ inputs.publish }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source kubernetes/addons/nvidia-ai-readiness/images/source-lock.env
+          mkdir -p dist
+          helm package kubernetes/addons/nvidia-ai-readiness --destination dist
+          test -s "dist/nvidia-ai-readiness-${NVIDIA_AI_READINESS_VERSION}.tgz"
+          if [[ ${PUBLISH} == true ]]; then
+            printf '%s' "${GH_TOKEN}" | helm registry login ghcr.io \
+              --username "${GITHUB_ACTOR}" --password-stdin
+            helm push "dist/nvidia-ai-readiness-${NVIDIA_AI_READINESS_VERSION}.tgz" \
+              "${CHART_REGISTRY}"
+          fi
+
+      - name: Record local artifact identities
+        if: ${{ !inputs.publish }}
+        run: |
+          source kubernetes/addons/nvidia-ai-readiness/images/source-lock.env
+          docker image inspect \
+            "${ORCHESTRATOR_IMAGE}:${NVIDIA_AI_READINESS_VERSION}" \
+            "${CUDA_SMOKE_IMAGE}:${NVIDIA_AI_READINESS_VERSION}"
+          sha256sum "dist/nvidia-ai-readiness-${NVIDIA_AI_READINESS_VERSION}.tgz"

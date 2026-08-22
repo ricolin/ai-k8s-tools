@@ -54,3 +54,10 @@ Run the offline contract:
 ```bash
 ./kubernetes/addons/nvidia-ai-readiness/test-render.sh
 ```
+
+`images/source-lock.env` pins the Ubuntu, CUDA devel/runtime, and kubectl build
+inputs. The manually dispatched `NVIDIA AI readiness` workflow always builds
+the amd64 images and chart; it publishes to the named GHCR repositories only
+when its `publish` input is explicitly true. Promotion must resolve the
+registry-returned image and chart digests and consume those digests rather than
+the `0.1.0` transport tags.

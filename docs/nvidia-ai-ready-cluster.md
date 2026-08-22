@@ -46,6 +46,12 @@ rejected, NRI remains disabled, deadlines and least-privilege RBAC are present,
 and the observed readiness Pod image can be captured. These are render-time
 checks only; they do not claim physical GPU acceptance.
 
+The image source lock is
+`kubernetes/addons/nvidia-ai-readiness/images/source-lock.env`. Use the
+repository's manually dispatched `NVIDIA AI readiness` workflow to build it.
+Set `publish=true` only after the offline acceptance passes, then resolve and
+record the registry-returned digests before creating an add-on profile.
+
 ## Runtime Acceptance
 
 A successful add-on release must retain the evidence ConfigMap and prove:
