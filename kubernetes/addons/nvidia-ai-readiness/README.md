@@ -61,7 +61,7 @@ inputs. The manually dispatched `NVIDIA AI readiness` workflow always builds
 the amd64 images and chart; it publishes to the named GHCR repositories only
 when its `publish` input is explicitly true. Promotion must resolve the
 registry-returned image and chart digests and consume those digests rather than
-the `0.1.0` transport tags.
+the `0.1.1` transport tags.
 
 The accepted public artifacts, source commit, and successful publication run
 are recorded in `artifacts.lock.yaml`. Anonymous registry requests must return
