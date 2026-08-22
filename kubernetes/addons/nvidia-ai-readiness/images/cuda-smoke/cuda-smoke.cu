@@ -38,9 +38,7 @@ int main() {
   std::cout << "{\"status\":\"PASS\",\"device_count\":" << count << ",\"devices\":[";
   for (int index = 0; index < count; ++index) {
     cudaDeviceProp properties{};
-    cudaUUID_t uuid{};
     check(cudaGetDeviceProperties(&properties, index), "cudaGetDeviceProperties");
-    check(cudaDeviceGetUuid(&uuid, index), "cudaDeviceGetUuid");
     int* value = nullptr;
     check(cudaSetDevice(index), "cudaSetDevice");
     check(cudaMalloc(&value, sizeof(int)), "cudaMalloc");
@@ -49,7 +47,7 @@ int main() {
     check(cudaFree(value), "cudaFree");
     if (index) std::cout << ',';
     std::cout << "{\"index\":" << index << ",\"name\":\"" << properties.name
-              << "\",\"uuid\":\"" << uuid_string(uuid)
+              << "\",\"uuid\":\"" << uuid_string(properties.uuid)
               << "\",\"compute_capability\":\"" << properties.major << '.'
               << properties.minor << "\",\"memory_bytes\":"
               << properties.totalGlobalMem << '}';

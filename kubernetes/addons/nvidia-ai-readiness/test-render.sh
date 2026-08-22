@@ -172,7 +172,7 @@ if grep -Fq -- '--dry-run=client -o yaml | kubectl apply' \
   echo "evidence payload was copied into a kubectl last-applied annotation" >&2
   exit 1
 fi
-grep -Fq 'cudaDeviceGetUuid' \
+grep -Fq 'uuid_string(properties.uuid)' \
   "${chart_dir}/images/cuda-smoke/cuda-smoke.cu"
 
 echo "PASS: NVIDIA add-on render contract"
