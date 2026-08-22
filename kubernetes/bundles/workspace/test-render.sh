@@ -15,4 +15,8 @@ done
 grep -Fq 'helm.sh/resource-policy: keep' "${temporary}/static.yaml"
 grep -Fq 'persistentVolumeReclaimPolicy: Retain' "${temporary}/static.yaml"
 grep -Fq 'automountServiceAccountToken: false' "${temporary}/static.yaml"
+grep -Fq 'runAsNonRoot: true' "${temporary}/static.yaml"
+grep -Fq 'runAsUser: 65532' "${temporary}/static.yaml"
+grep -Fq 'type: RuntimeDefault' "${temporary}/static.yaml"
+grep -Fq 'readOnlyRootFilesystem: true' "${temporary}/static.yaml"
 echo "PASS: workspace bundle render contract"

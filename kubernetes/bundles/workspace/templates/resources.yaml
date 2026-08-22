@@ -109,6 +109,13 @@ spec:
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       {{- with .Values.validation.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -131,6 +138,7 @@ spec:
               stat "${marker}"
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           volumeMounts:
