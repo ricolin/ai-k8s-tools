@@ -10,6 +10,7 @@ from ai_build_tools_k8s.code_review_model import (
     ContractError,
     record_digest,
     render_comparison_job,
+    render_release_job,
     render_node_local_serving,
     render_serving,
     render_training_job,
@@ -204,3 +205,36 @@ def test_comparison_job_uses_one_gpu_and_restricted_identity() -> None:
     assert container["resources"]["requests"]["nvidia.com/gpu"] == 1
     assert pod["securityContext"]["runAsUser"] == 65532
     assert value["spec"]["activeDeadlineSeconds"] == 7200
+
+
+def test_release_job_verifies_mounted_artifacts_without_a_gpu() -> None:
+    value = render_release_job(
+        "release-c",
+        "ai-workflows",
+        "reviewer:v1",
+        "workspace",
+        digest("a"),
+        "/workspace/foundation",
+        "/workspace/adapter",
+        "/workspace/tokenizer",
+        "/workspace/release/chat-template.jinja",
+        "/workspace/release/review.schema.json",
+        "/workspace/release/agent-plan.schema.json",
+        "/workspace/release/policy-profile.json",
+        "/workspace/release/code-review-release.json",
+        "/workspace/release/mounted-verification.json",
+        16,
+        "accelerator",
+        "h200",
+        "Never",
+        digest("8"),
+        True,
+    )
+    pod = value["spec"]["template"]["spec"]
+    container = pod["containers"][0]
+
+    assert container["command"][-1] == "ai_build_tools_k8s.code_review_model"
+    assert container["args"][0] == "create-and-verify-release"
+    assert "nvidia.com/gpu" not in container["resources"]["requests"]
+    assert pod["securityContext"]["runAsUser"] == 65532
+    assert pod["tolerations"][0]["key"] == "node-role.kubernetes.io/control-plane"

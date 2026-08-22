@@ -76,6 +76,15 @@ def test_quality_gate_rejects_invalid_task_contract() -> None:
     assert "task cleanup_required must be true" in result["contract_errors"]
 
 
+def test_quality_gate_accepts_schema_supported_style_category() -> None:
+    generated = generator.record("C", 0)
+    answer = json.loads(generated["messages"][2]["content"])
+    answer["review"]["findings"][0]["category"] = "style"
+    _, errors = quality_gate.validate_response_text(json.dumps(answer))
+
+    assert "finding category is invalid" not in errors
+
+
 def test_comparison_prompts_match_live_request_shape() -> None:
     prompts = generator.comparison_prompts()
 

@@ -472,6 +472,121 @@ def render_comparison_job(
     }
 
 
+def render_release_job(
+    name: str,
+    namespace: str,
+    release_image: str,
+    pvc_name: str,
+    foundation_digest: str,
+    foundation_path: str,
+    adapter_path: str,
+    tokenizer_path: str,
+    chat_template_path: str,
+    review_schema_path: str,
+    agent_plan_schema_path: str,
+    policy_profile_path: str,
+    release_path: str,
+    verification_path: str,
+    lora_rank: int,
+    node_selector_key: str,
+    node_selector_value: str,
+    image_pull_policy: str,
+    node_local_image_id: str,
+    tolerate_control_plane: bool = False,
+) -> dict[str, Any]:
+    require_sha256(foundation_digest, "foundation_digest")
+    require(lora_rank > 0, "lora_rank must be positive")
+    require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
+    if image_pull_policy == "Never":
+        require(":" in release_image and "@" not in release_image, "node-local image requires a tag")
+        require_sha256(node_local_image_id, "node_local_image_id")
+    else:
+        require_image(release_image, "release_image")
+        require(not node_local_image_id, "node_local_image_id is only valid with Never")
+    mounted_paths = (
+        foundation_path,
+        adapter_path,
+        tokenizer_path,
+        chat_template_path,
+        review_schema_path,
+        agent_plan_schema_path,
+        policy_profile_path,
+        release_path,
+        verification_path,
+    )
+    require(all(value.startswith("/workspace/") for value in mounted_paths), "release paths must be on the workspace volume")
+    args = [
+        "create-and-verify-release",
+        "--foundation-digest", foundation_digest,
+        "--foundation", foundation_path,
+        "--adapter", adapter_path,
+        "--tokenizer", tokenizer_path,
+        "--chat-template", chat_template_path,
+        "--review-schema", review_schema_path,
+        "--agent-plan-schema", agent_plan_schema_path,
+        "--policy-profile", policy_profile_path,
+        "--lora-rank", str(lora_rank),
+        "--release-output", release_path,
+        "--verification-output", verification_path,
+    ]
+    pod_spec: dict[str, Any] = {
+        "restartPolicy": "Never",
+        "automountServiceAccountToken": False,
+        "securityContext": {
+            "runAsNonRoot": True,
+            "runAsUser": 65532,
+            "runAsGroup": 65532,
+            "fsGroup": 65532,
+            "seccompProfile": {"type": "RuntimeDefault"},
+        },
+        "containers": [
+            {
+                "name": "release",
+                "image": release_image,
+                "imagePullPolicy": image_pull_policy,
+                "command": ["/opt/ai-venv/bin/python", "-m", "ai_build_tools_k8s.code_review_model"],
+                "args": args,
+                "resources": {
+                    "requests": {"cpu": "2", "memory": "4Gi"},
+                    "limits": {"cpu": "16", "memory": "32Gi"},
+                },
+                "securityContext": {
+                    "allowPrivilegeEscalation": False,
+                    "capabilities": {"drop": ["ALL"]},
+                    "readOnlyRootFilesystem": True,
+                    "runAsNonRoot": True,
+                    "runAsUser": 65532,
+                    "runAsGroup": 65532,
+                },
+                "volumeMounts": [
+                    {"name": "workspace", "mountPath": "/workspace"},
+                    {"name": "tmp", "mountPath": "/tmp"},
+                ],
+            }
+        ],
+        "volumes": [
+            {"name": "workspace", "persistentVolumeClaim": {"claimName": pvc_name}},
+            {"name": "tmp", "emptyDir": {}},
+        ],
+    }
+    if node_selector_key and node_selector_value:
+        pod_spec["nodeSelector"] = {node_selector_key: node_selector_value}
+    add_control_plane_tolerations(pod_spec, tolerate_control_plane)
+    metadata: dict[str, Any] = {"name": name, "namespace": namespace}
+    if node_local_image_id:
+        metadata["annotations"] = {"ai-k8s-tools.ricolin.dev/node-local-image-id": node_local_image_id}
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": metadata,
+        "spec": {
+            "backoffLimit": 0,
+            "activeDeadlineSeconds": 3600,
+            "template": {"metadata": {"labels": {"app": name}}, "spec": pod_spec},
+        },
+    }
+
+
 def render_serving(
     release: dict[str, Any],
     name: str,
@@ -617,6 +732,19 @@ def build_parser() -> argparse.ArgumentParser:
     mounted.add_argument("--policy-profile", required=True)
     mounted.add_argument("--output", default="")
 
+    combined = commands.add_parser("create-and-verify-release")
+    combined.add_argument("--foundation-digest", required=True)
+    combined.add_argument("--foundation", required=True)
+    combined.add_argument("--adapter", required=True)
+    combined.add_argument("--tokenizer", required=True)
+    combined.add_argument("--chat-template", required=True)
+    combined.add_argument("--review-schema", required=True)
+    combined.add_argument("--agent-plan-schema", required=True)
+    combined.add_argument("--policy-profile", required=True)
+    combined.add_argument("--lora-rank", type=int, required=True)
+    combined.add_argument("--release-output", required=True)
+    combined.add_argument("--verification-output", required=True)
+
     training = commands.add_parser("render-training-job")
     training.add_argument("--name", required=True)
     training.add_argument("--namespace", required=True)
@@ -671,6 +799,29 @@ def build_parser() -> argparse.ArgumentParser:
     comparison.add_argument("--node-local-image-id", default="")
     comparison.add_argument("--tolerate-control-plane", action="store_true")
     comparison.add_argument("--output", required=True)
+
+    release_job = commands.add_parser("render-release-job")
+    release_job.add_argument("--name", required=True)
+    release_job.add_argument("--namespace", required=True)
+    release_job.add_argument("--release-image", required=True)
+    release_job.add_argument("--pvc", required=True)
+    release_job.add_argument("--foundation-digest", required=True)
+    release_job.add_argument("--foundation-path", required=True)
+    release_job.add_argument("--adapter-path", required=True)
+    release_job.add_argument("--tokenizer-path", required=True)
+    release_job.add_argument("--chat-template-path", required=True)
+    release_job.add_argument("--review-schema-path", required=True)
+    release_job.add_argument("--agent-plan-schema-path", required=True)
+    release_job.add_argument("--policy-profile-path", required=True)
+    release_job.add_argument("--release-path", required=True)
+    release_job.add_argument("--verification-path", required=True)
+    release_job.add_argument("--lora-rank", type=int, required=True)
+    release_job.add_argument("--node-selector-key", default="")
+    release_job.add_argument("--node-selector-value", default="")
+    release_job.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="IfNotPresent")
+    release_job.add_argument("--node-local-image-id", default="")
+    release_job.add_argument("--tolerate-control-plane", action="store_true")
+    release_job.add_argument("--output", required=True)
     return parser
 
 
@@ -708,6 +859,34 @@ def main() -> None:
             )
             if args.output:
                 write_json(Path(args.output), result)
+        elif args.command == "create-and-verify-release":
+            release_path = Path(args.release_output)
+            candidate_path = release_path.with_name(f".{release_path.name}.candidate")
+            write_json(
+                candidate_path,
+                create_release(
+                    args.foundation_digest,
+                    Path(args.adapter),
+                    Path(args.tokenizer),
+                    Path(args.chat_template),
+                    Path(args.review_schema),
+                    Path(args.agent_plan_schema),
+                    Path(args.policy_profile),
+                    args.lora_rank,
+                ),
+            )
+            verification = verify_mounted_release(
+                candidate_path,
+                Path(args.foundation),
+                Path(args.adapter),
+                Path(args.tokenizer),
+                Path(args.chat_template),
+                Path(args.review_schema),
+                Path(args.agent_plan_schema),
+                Path(args.policy_profile),
+            )
+            candidate_path.replace(release_path)
+            write_json(Path(args.verification_output), verification)
         elif args.command == "render-training-job":
             write_json(
                 Path(args.output),
@@ -768,6 +947,32 @@ def main() -> None:
                     args.evaluator_image,
                     args.pvc,
                     args.config_path,
+                    args.node_selector_key,
+                    args.node_selector_value,
+                    args.image_pull_policy,
+                    args.node_local_image_id,
+                    args.tolerate_control_plane,
+                ),
+            )
+        elif args.command == "render-release-job":
+            write_json(
+                Path(args.output),
+                render_release_job(
+                    args.name,
+                    args.namespace,
+                    args.release_image,
+                    args.pvc,
+                    args.foundation_digest,
+                    args.foundation_path,
+                    args.adapter_path,
+                    args.tokenizer_path,
+                    args.chat_template_path,
+                    args.review_schema_path,
+                    args.agent_plan_schema_path,
+                    args.policy_profile_path,
+                    args.release_path,
+                    args.verification_path,
+                    args.lora_rank,
                     args.node_selector_key,
                     args.node_selector_value,
                     args.image_pull_policy,

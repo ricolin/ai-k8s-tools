@@ -59,7 +59,7 @@ def validate_response_text(raw: str) -> tuple[dict[str, Any] | None, list[str]]:
                 if finding.get("severity") not in {"critical", "high", "medium", "low"}:
                     errors.append("finding severity is invalid")
                 if finding.get("category") not in {
-                    "correctness", "reliability", "security", "compatibility", "performance", "testing"
+                    "correctness", "reliability", "security", "compatibility", "performance", "testing", "style"
                 }:
                     errors.append("finding category is invalid")
                 if not isinstance(finding.get("line"), int) or finding["line"] < 1:
