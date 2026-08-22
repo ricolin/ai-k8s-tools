@@ -37,3 +37,6 @@ def test_sandbox_separates_networked_prepare_from_offline_patch_test() -> None:
     assert "git apply --check" in bundle["test-script.json"]["data"]["run.sh"]
     assert bundle["test-script.json"]["data"]["fix.patch"] == fix["unified_diff"]
     assert bundle["pvc.json"]["spec"]["storageClassName"] == "local-path"
+    for name in ("fetch-job.json", "prepare-job.json", "test-job.json"):
+        container = bundle[name]["spec"]["template"]["spec"]["containers"][0]
+        assert container["imagePullPolicy"] == "IfNotPresent"

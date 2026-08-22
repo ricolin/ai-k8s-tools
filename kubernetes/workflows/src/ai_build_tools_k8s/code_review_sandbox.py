@@ -170,6 +170,7 @@ def job(
                         {
                             "name": "runner",
                             "image": image,
+                            "imagePullPolicy": "IfNotPresent",
                             "command": command,
                             "env": [
                                 {"name": "HOME", "value": "/home/sandbox"},
