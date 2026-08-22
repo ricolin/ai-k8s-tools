@@ -125,3 +125,11 @@ def test_response_rejects_path_escape_and_unknown_profile() -> None:
     invalid_response["execution_plan"]["tasks"][1]["arguments"]["profile_id"] = "invented"
     with pytest.raises(ContractError, match="ungrounded profile"):
         validate_response(invalid_response, release(), packet())
+
+
+def test_candidate_fix_rejects_missing_terminal_newline() -> None:
+    invalid = response()["candidate_fix"]
+    invalid["unified_diff"] = invalid["unified_diff"].rstrip("\n")
+
+    with pytest.raises(ContractError, match="must end with a newline"):
+        validate_candidate_fix(invalid)

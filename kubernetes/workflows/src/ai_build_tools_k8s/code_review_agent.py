@@ -105,6 +105,7 @@ def validate_candidate_fix(fix: dict[str, Any]) -> dict[str, Any]:
     patch = fix["unified_diff"]
     require(isinstance(patch_id, str) and re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", patch_id), "invalid patch id")
     require(isinstance(patch, str) and patch, "proposed fix requires a unified diff")
+    require(patch.endswith("\n"), "candidate patch must end with a newline")
     require(len(patch.encode()) <= 256 * 1024, "candidate patch exceeds 256 KiB")
     require("GIT binary patch" not in patch and "Binary files " not in patch, "binary patches are not supported")
     headers = re.findall(r"^diff --git a/(.+) b/(.+)$", patch, flags=re.MULTILINE)
