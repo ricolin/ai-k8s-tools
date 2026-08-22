@@ -45,7 +45,10 @@ selector, tolerations, image pull secrets, and pull policy. This is required
 when a reviewed GPU node is also a tainted Kubernetes control-plane node.
 Evidence includes the requested content-addressed images, the readiness Pod's
 observed runtime `imageID`, GPU Operator Pod runtime `imageID` values, node GPU
-capacity, ClusterPolicy state, and both CUDA test logs.
+capacity, ClusterPolicy state, stable GPU UUIDs, and both CUDA test logs. The
+retained objects are projected to audit-relevant fields before the ConfigMap is
+created or replaced; the payload is not duplicated into a last-applied
+annotation.
 
 The profile is not inferred from an operating-system name or Kubernetes tag.
 It is disabled by default, checks the configured minimum Kubernetes minor plus

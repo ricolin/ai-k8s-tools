@@ -120,11 +120,21 @@ full_job=nvidia-ai-full-node
 run_cuda_job "${one_job}" 1 /tmp/one-gpu.log
 run_cuda_job "${full_job}" "${FULL_NODE_GPU_COUNT}" /tmp/full-node.log
 
-kubectl get clusterpolicy.nvidia.com "${CLUSTER_POLICY_NAME}" -o json >/tmp/cluster-policy.json
-kubectl -n "${OPERATOR_NAMESPACE}" get daemonset "${DEVICE_PLUGIN_DAEMONSET}" -o json >/tmp/device-plugin.json
-kubectl -n "${OPERATOR_NAMESPACE}" get pods -o json >/tmp/operator-pods.json
-kubectl -n "${TARGET_NAMESPACE}" get pod "${POD_NAME}" -o json >/tmp/readiness-pod.json
-kubectl get nodes -o json >"${nodes_json}"
+kubectl get clusterpolicy.nvidia.com "${CLUSTER_POLICY_NAME}" -o json |
+  jq '{apiVersion,kind,metadata:{name:.metadata.name,uid:.metadata.uid},status}' \
+    >/tmp/cluster-policy.json
+kubectl -n "${OPERATOR_NAMESPACE}" get daemonset "${DEVICE_PLUGIN_DAEMONSET}" -o json |
+  jq '{apiVersion,kind,metadata:{name:.metadata.name,uid:.metadata.uid,generation:.metadata.generation},spec:{selector:.spec.selector,template:{spec:{containers:[.spec.template.spec.containers[]|{name,image}]}}},status}' \
+    >/tmp/device-plugin.json
+kubectl -n "${OPERATOR_NAMESPACE}" get pods -o json |
+  jq '{apiVersion,kind,items:[.items[]|{metadata:{name:.metadata.name,uid:.metadata.uid},spec:{nodeName:.spec.nodeName,containers:[.spec.containers[]|{name,image}]},status:{phase:.status.phase,containerStatuses:[.status.containerStatuses[]?|{name,image,imageID,ready,restartCount}]}}]}' \
+    >/tmp/operator-pods.json
+kubectl -n "${TARGET_NAMESPACE}" get pod "${POD_NAME}" -o json |
+  jq '{apiVersion,kind,metadata:{name:.metadata.name,uid:.metadata.uid},spec:{nodeName:.spec.nodeName,containers:[.spec.containers[]|{name,image}]},status:{phase:.status.phase,containerStatuses:[.status.containerStatuses[]?|{name,image,imageID,ready,restartCount}]}}' \
+    >/tmp/readiness-pod.json
+kubectl get nodes -o json |
+  jq '{apiVersion,kind,items:[.items[]|{metadata:{name:.metadata.name,uid:.metadata.uid,labels:{"kubernetes.io/arch":.metadata.labels["kubernetes.io/arch"],"kubernetes.io/os":.metadata.labels["kubernetes.io/os"]}},status:{capacity:{"nvidia.com/gpu":.status.capacity["nvidia.com/gpu"]},allocatable:{"nvidia.com/gpu":.status.allocatable["nvidia.com/gpu"]},nodeInfo:{architecture:.status.nodeInfo.architecture,containerRuntimeVersion:.status.nodeInfo.containerRuntimeVersion,kernelVersion:.status.nodeInfo.kernelVersion,kubeletVersion:.status.nodeInfo.kubeletVersion,operatingSystem:.status.nodeInfo.operatingSystem,osImage:.status.nodeInfo.osImage}}}]}' \
+    >"${nodes_json}"
 jq -n \
   --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg orchestrator_image "${ORCHESTRATOR_IMAGE_ID:-unknown}" \
@@ -146,9 +156,15 @@ jq -n \
     operator_pods:$operator_pods[0], readiness_pod:$readiness_pod[0],
     one_gpu_log:$one_gpu, full_node_log:$full_node}' >/tmp/evidence.json
 
+evidence_configmap=/tmp/evidence-configmap.json
 kubectl -n "${TARGET_NAMESPACE}" create configmap "${EVIDENCE_CONFIGMAP}" \
   --from-file=evidence.json=/tmp/evidence.json \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o json >"${evidence_configmap}"
+if kubectl -n "${TARGET_NAMESPACE}" get configmap "${EVIDENCE_CONFIGMAP}" >/dev/null 2>&1; then
+  kubectl -n "${TARGET_NAMESPACE}" replace -f "${evidence_configmap}"
+else
+  kubectl -n "${TARGET_NAMESPACE}" create -f "${evidence_configmap}"
+fi
 kubectl -n "${TARGET_NAMESPACE}" get configmap "${EVIDENCE_CONFIGMAP}" -o json >/tmp/evidence-configmap.json
 jq -e '.data["evidence.json"] | fromjson | .status == "PASS"' /tmp/evidence-configmap.json >/dev/null
 echo "PASS: ordered NVIDIA one-GPU and full-node readiness completed"

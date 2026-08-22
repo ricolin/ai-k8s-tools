@@ -165,5 +165,14 @@ grep -Fq 'tolerations: ${SMOKE_TOLERATIONS_JSON}' \
   "${chart_dir}/images/orchestrator/orchestrate.sh"
 grep -Fq 'imagePullSecrets: ${SMOKE_IMAGE_PULL_SECRETS_JSON}' \
   "${chart_dir}/images/orchestrator/orchestrate.sh"
+grep -Fq 'kubectl -n "${TARGET_NAMESPACE}" replace' \
+  "${chart_dir}/images/orchestrator/orchestrate.sh"
+if grep -Fq -- '--dry-run=client -o yaml | kubectl apply' \
+  "${chart_dir}/images/orchestrator/orchestrate.sh"; then
+  echo "evidence payload was copied into a kubectl last-applied annotation" >&2
+  exit 1
+fi
+grep -Fq 'cudaDeviceGetUuid' \
+  "${chart_dir}/images/cuda-smoke/cuda-smoke.cu"
 
 echo "PASS: NVIDIA add-on render contract"

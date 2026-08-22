@@ -59,8 +59,8 @@ A successful add-on release must retain the evidence ConfigMap and prove:
 - current-generation NVIDIA ClusterPolicy readiness;
 - device-plugin DaemonSet rollout;
 - exact expected GPU capacity and allocatable counts;
-- one-GPU CUDA allocation and memory operation;
-- full-node CUDA allocation and memory operations; and
+- one-GPU CUDA allocation, memory operation, and stable GPU UUID;
+- full-node CUDA allocation, memory operations, and all GPU UUIDs; and
 - observed runtime image IDs for the readiness and GPU Operator Pods.
 
 The CUDA child Jobs inherit `readiness.nodeSelector`,
