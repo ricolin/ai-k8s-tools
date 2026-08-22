@@ -11,6 +11,19 @@ first_from_line=$(grep -n '^FROM ' \
   "${chart_dir}/images/cuda-smoke/Dockerfile" | head -1 | cut -d: -f1)
 [[ ${runtime_arg_line} -lt ${first_from_line} ]]
 
+python3 - "${chart_dir}/artifacts.lock.yaml" <<'PY'
+import re
+import sys
+
+import yaml
+
+lock = yaml.safe_load(open(sys.argv[1]))
+assert lock["sourceCommit"] == "addbd49e713732e7f2c804b33d96e71dfb93637c"
+assert lock["workflowRun"].endswith("/32563606260")
+for artifact in lock["artifacts"].values():
+    assert re.fullmatch(r"sha256:[0-9a-f]{64}", artifact["digest"])
+PY
+
 printf '%s  %s\n' \
   6d1b282d74288be206c66dfe49073b7c85c209e92826c27f6507429055e2e102 \
   "${chart_dir}/charts/gpu-operator-v26.7.0.tgz" | sha256sum --check >/dev/null

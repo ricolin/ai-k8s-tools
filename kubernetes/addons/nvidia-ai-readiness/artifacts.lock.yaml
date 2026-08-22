@@ -1,0 +1,13 @@
+version: 0.1.0
+sourceCommit: addbd49e713732e7f2c804b33d96e71dfb93637c
+workflowRun: https://github.com/ricolin/ai-k8s-tools/actions/runs/32563606260
+artifacts:
+  chart:
+    reference: oci://ghcr.io/ricolin/ai-k8s-charts/nvidia-ai-readiness
+    digest: sha256:842b285bde72b3abb33773454c50d0d8f3fa4362d1b75f4040e13ae05e096a11
+  orchestrator:
+    reference: ghcr.io/ricolin/nvidia-ai-readiness-orchestrator
+    digest: sha256:6040aa2bea1f82f005d33c954d0d53ec58af64766c1f7f1c344721c43058e410
+  cudaSmoke:
+    reference: ghcr.io/ricolin/nvidia-ai-readiness-cuda-smoke
+    digest: sha256:0ace54d111634456021f137c6cd6972e2a9871142f1e01bb0d4b82396750e22a
