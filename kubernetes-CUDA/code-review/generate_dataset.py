@@ -162,7 +162,9 @@ def request_payload(
 def response(stage: str, index: int, case: dict[str, Any], split: str, identity: str) -> dict[str, Any]:
     evidence = f"review-{stage.lower()}-{index:04d}:diff"
     repository_lock = f"repo-{stage.lower()}-{index:04d}"
-    pr_lock = f"pr-{stage.lower()}-{index:04d}" if stage != "A" else None
+    pr_lock = None
+    if stage == "B" or (stage == "C" and index % 2):
+        pr_lock = f"pr-{stage.lower()}-{index:04d}"
     profile = f"{case['language']}-unit"
     propose = stage == "C" and split != "adversarial"
     finding = {
@@ -242,7 +244,9 @@ def record(stage: str, index: int) -> dict[str, Any]:
     split = SPLIT_CYCLE[index % len(SPLIT_CYCLE)]
     evidence = f"review-{stage.lower()}-{index:04d}:diff"
     repository_lock = f"repo-{stage.lower()}-{index:04d}"
-    pr_lock = f"pr-{stage.lower()}-{index:04d}" if stage != "A" else None
+    pr_lock = None
+    if stage == "B" or (stage == "C" and index % 2):
+        pr_lock = f"pr-{stage.lower()}-{index:04d}"
     profile = f"{case['language']}-unit"
     identity = reviewer_identity(stage, index)
     target = {"A": "single-file", "B": "pull-request", "C": "agent-plan"}[stage]

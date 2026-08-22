@@ -76,3 +76,11 @@ def test_comparison_prompts_match_live_request_shape() -> None:
     assert payload["release"]["adapter_digest"] == prompts[-1]["expected_reviewer_identity"]
     assert payload["review_packet"]["reference_index"]["pull_request_lock_ids"] == ["pr-agent"]
     assert "tool_argument_keys" in payload["contract"]
+
+
+def test_release_c_covers_repository_and_pull_request_inputs() -> None:
+    repository = json.loads(generator.record("C", 0)["messages"][1]["content"])
+    pull_request = json.loads(generator.record("C", 1)["messages"][1]["content"])
+
+    assert repository["review_packet"]["reference_index"]["pull_request_lock_ids"] == []
+    assert pull_request["review_packet"]["reference_index"]["pull_request_lock_ids"] == ["pr-c-0001"]
