@@ -190,6 +190,14 @@ def test_local_path_helper_image_is_digest_pinned() -> None:
     assert re.fullmatch(r".+@sha256:[a-f0-9]{64}", match.group(1))
 
 
+def test_platform_tool_downloads_are_versioned_and_checksum_pinned() -> None:
+    versions = (Path(__file__).parents[2] / "versions.env").read_text()
+    for variable in ("KUBECTL_VERSION", "KUSTOMIZE_VERSION"):
+        assert re.search(rf"^{variable}=v[0-9]+\.[0-9]+\.[0-9]+$", versions, flags=re.MULTILINE)
+    for variable in ("KUBECTL_SHA256", "KUSTOMIZE_SHA256"):
+        assert re.search(rf"^{variable}=[a-f0-9]{{64}}$", versions, flags=re.MULTILINE)
+
+
 def test_runtime_health_and_prediction(tmp_path: Path) -> None:
     base = tmp_path / "base"
     adapter = tmp_path / "adapter"

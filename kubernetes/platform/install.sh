@@ -18,24 +18,39 @@ tool_root=${TOOL_ROOT:-/opt/ai-build-tools-bin}
 evidence_dir=${EVIDENCE_DIR:-${root_dir}/evidence/platform}
 mkdir -p "${source_root}" "${tool_root}" "${evidence_dir}"
 
-if [[ ! -x ${tool_root}/kubectl ]]; then
+installed_kubectl_version=$(
+  "${tool_root}/kubectl" version --client -o json 2>/dev/null |
+    jq -r '.clientVersion.gitVersion // empty'
+) || true
+if [[ ${installed_kubectl_version} != "${KUBECTL_VERSION}" ]]; then
   curl -fL --retry 5 -o "${tool_root}/kubectl" \
     "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-  curl -fL --retry 5 -o "${evidence_dir}/kubectl.sha256.expected" \
-    "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"
-  printf '%s  %s\n' "$(<"${evidence_dir}/kubectl.sha256.expected")" "${tool_root}/kubectl" |
+  printf '%s  %s\n' "${KUBECTL_SHA256}" "${tool_root}/kubectl" |
     sha256sum --check
   chmod 0755 "${tool_root}/kubectl"
 fi
+[[ $("${tool_root}/kubectl" version --client -o json |
+  jq -r '.clientVersion.gitVersion') == "${KUBECTL_VERSION}" ]] || {
+  echo "kubectl version does not match ${KUBECTL_VERSION}" >&2
+  exit 1
+}
 
-if [[ ! -x ${tool_root}/kustomize ]]; then
+installed_kustomize_version=$(
+  "${tool_root}/kustomize" version 2>/dev/null
+) || true
+if [[ ${installed_kustomize_version} != "${KUSTOMIZE_VERSION}" ]]; then
   archive="kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
   curl -fL --retry 5 -o "${evidence_dir}/${archive}" \
     "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/${archive}"
-  sha256sum "${evidence_dir}/${archive}" >"${evidence_dir}/${archive}.sha256"
+  printf '%s  %s\n' "${KUSTOMIZE_SHA256}" "${evidence_dir}/${archive}" |
+    sha256sum --check
   tar -xzf "${evidence_dir}/${archive}" -C "${tool_root}" kustomize
   chmod 0755 "${tool_root}/kustomize"
 fi
+[[ $("${tool_root}/kustomize" version) == "${KUSTOMIZE_VERSION}" ]] || {
+  echo "kustomize version does not match ${KUSTOMIZE_VERSION}" >&2
+  exit 1
+}
 
 kubectl=${tool_root}/kubectl
 kustomize=${tool_root}/kustomize
