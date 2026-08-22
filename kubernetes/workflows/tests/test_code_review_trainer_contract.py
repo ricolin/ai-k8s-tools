@@ -111,6 +111,17 @@ def test_release_c_covers_repository_and_pull_request_inputs() -> None:
     assert pull_request["review_packet"]["reference_index"]["pull_request_lock_ids"] == ["pr-c-0001"]
 
 
+def test_release_c_training_includes_resolved_green_reviews() -> None:
+    generated = generator.record("C", 3)
+    request = json.loads(generated["messages"][1]["content"])
+    answer = json.loads(generated["messages"][2]["content"])
+
+    assert request["review_packet"]["evidence"][0]["selected_profile_status"] == "PASSED"
+    assert answer["review"]["verdict"] == "APPROVE"
+    assert answer["review"]["findings"] == []
+    assert answer["candidate_fix"]["status"] == "NOT_NEEDED"
+
+
 def test_code_review_image_uses_only_the_neutral_training_runtime() -> None:
     dockerfile = (ROOT / "kubernetes-CUDA/code-review/Dockerfile").read_text()
 

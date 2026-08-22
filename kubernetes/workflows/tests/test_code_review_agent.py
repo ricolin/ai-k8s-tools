@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from ai_build_tools_k8s.code_review_agent import (
+    create_followup_packet,
     collect_packet,
     evaluate_green,
     make_request,
@@ -189,6 +190,31 @@ def test_evaluate_green_requires_tests_and_clean_final_review() -> None:
 
     assert result["status"] == "GREEN"
     assert all(result["checks"].values())
+
+
+def test_followup_packet_records_observed_patch_and_test_result() -> None:
+    source_commit = "a" * 40
+    initial = packet()
+    initial.update(
+        {
+            "source": {"commit": source_commit},
+            "evidence": [{"id": "diff-1", "kind": "source-file", "content": "old"}],
+        }
+    )
+    result = create_followup_packet(
+        initial,
+        response(),
+        release(),
+        f"UNIT_TEST_STATUS=0\nSOURCE_COMMIT={source_commit}\n",
+        "1 passed\n",
+        response()["candidate_fix"]["unified_diff"],
+        1,
+    )
+
+    assert result["observed"]["unit_test_status"] == 0
+    assert result["instruction"].startswith("Perform the final review")
+    assert len(result["reference_index"]["evidence_ids"]) == 4
+    assert result["previous_response_digest"].startswith("sha256:")
 
 
 def test_response_rejects_path_escape_and_unknown_profile() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -293,6 +294,74 @@ def collect_packet(
     }
 
 
+def create_followup_packet(
+    packet: dict[str, Any],
+    response: dict[str, Any],
+    release: dict[str, Any],
+    result_env: str,
+    test_log: str,
+    patch: str,
+    iteration: int,
+) -> dict[str, Any]:
+    index = validate_packet(packet)
+    validate_response(response, release, packet)
+    require(1 <= iteration <= 5, "iteration must be between one and five")
+    values = dict(line.split("=", 1) for line in result_env.splitlines() if line and "=" in line)
+    source = packet.get("source", {})
+    source_commit = str(source.get("commit", ""))
+    require(bool(re.fullmatch(r"[0-9a-f]{40}", source_commit)), "packet source commit is invalid")
+    require(values.get("SOURCE_COMMIT") == source_commit, "sandbox source commit differs from the packet")
+    status = values.get("UNIT_TEST_STATUS")
+    require(status is not None and status.isdigit(), "sandbox unit-test status is invalid")
+    require(len(test_log.encode()) <= 64 * 1024, "test log exceeds 64 KiB")
+    require(bool(test_log.strip()), "test log is empty")
+    require(len(patch.encode()) <= 256 * 1024, "observed patch exceeds 256 KiB")
+    fix = response["candidate_fix"]
+    require(fix["status"] == "PROPOSED", "follow-up requires a proposed candidate fix")
+    require(patch, "follow-up requires the observed repository patch")
+    require(len(index["repository_lock_ids"]) == 1, "follow-up requires exactly one repository lock")
+    repository_lock = sorted(index["repository_lock_ids"])[0]
+    prefix = f"{repository_lock}:iteration-{iteration}"
+    observed = [
+        {
+            "id": f"{prefix}:patch",
+            "kind": "applied-patch",
+            "sha256": f"sha256:{hashlib.sha256(patch.encode()).hexdigest()}",
+            "content": patch,
+        },
+        {
+            "id": f"{prefix}:tests",
+            "kind": "selected-profile-output",
+            "status": int(status),
+            "content": test_log,
+        },
+        {
+            "id": f"{prefix}:result",
+            "kind": "sandbox-result",
+            "source_commit": source_commit,
+            "unit_test_status": int(status),
+        },
+    ]
+    result = json.loads(json.dumps(packet))
+    result["instruction"] = (
+        "Perform the final review of the exact applied patch and observed selected-profile result. "
+        "When no remaining defect is supported, return APPROVE or COMMENT with no findings and NOT_NEEDED."
+        if status == "0"
+        else "Review the observed selected-profile failure and propose one corrected minimal patch."
+    )
+    result["evidence"] = list(result.get("evidence", [])) + observed
+    result["reference_index"]["evidence_ids"] = [item["id"] for item in result["evidence"]]
+    result["iteration"] = iteration
+    result["previous_response_digest"] = f"sha256:{hashlib.sha256(canonical_json(response)).hexdigest()}"
+    result["observed"] = {
+        "source_commit": source_commit,
+        "unit_test_status": int(status),
+        "patch_digest": observed[0]["sha256"],
+    }
+    validate_packet(result)
+    return result
+
+
 def evaluate_green(response: dict[str, Any], result_env: str) -> dict[str, Any]:
     values = dict(
         line.split("=", 1)
@@ -478,6 +547,16 @@ def build_parser() -> argparse.ArgumentParser:
     packet.add_argument("--max-total-bytes", type=int, default=24576)
     packet.add_argument("--output", required=True)
 
+    followup = commands.add_parser("create-followup-packet")
+    followup.add_argument("--packet", required=True)
+    followup.add_argument("--response", required=True)
+    followup.add_argument("--release", required=True)
+    followup.add_argument("--result-env", required=True)
+    followup.add_argument("--test-log", required=True)
+    followup.add_argument("--patch", required=True)
+    followup.add_argument("--iteration", type=int, required=True)
+    followup.add_argument("--output", required=True)
+
     execute = commands.add_parser("run")
     execute.add_argument("--release", required=True)
     execute.add_argument("--packet", required=True)
@@ -512,6 +591,19 @@ def main() -> None:
                     args.max_files,
                     args.max_file_bytes,
                     args.max_total_bytes,
+                ),
+            )
+        elif args.command == "create-followup-packet":
+            write_json(
+                Path(args.output),
+                create_followup_packet(
+                    load_json(Path(args.packet)),
+                    load_json(Path(args.response)),
+                    load_json(Path(args.release)),
+                    Path(args.result_env).read_text(),
+                    Path(args.test_log).read_text(),
+                    Path(args.patch).read_text(),
+                    args.iteration,
                 ),
             )
         elif args.command == "validate-response":
