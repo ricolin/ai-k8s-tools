@@ -493,6 +493,10 @@ def make_request(release: dict[str, Any], packet: dict[str, Any]) -> dict[str, A
         "candidate_fix, and execution_plan. reviewer_identity must equal the supplied adapter_digest. review must follow the supplied "
         "schema and cite only supplied evidence IDs. finding.id is a reviewer-created label such as F1; "
         "finding.evidence must be the exact supplied evidence ID, never the evidence text or finding label. "
+        "When candidate_fix.status is PROPOSED, candidate_fix.patch_id must be a new lowercase slug such as fix-1: "
+        "it must start with an alphanumeric character, contain only lowercase letters, digits, dot, underscore, or "
+        "hyphen, and contain at most 64 characters. It is not a digest, evidence ID, adapter ID, or lock ID. Copy "
+        "that exact patch_id into every apply_candidate_patch or export_patch task. "
         "Prioritize correctness, regressions, compatibility, reliability, "
         "and missing tests over style. Never invent a file, line, test result, repository identity, or pull-request fact. "
         "When a concrete fix is justified, candidate_fix may contain one bounded text-only git unified diff for observed "
@@ -521,6 +525,7 @@ def make_request(release: dict[str, Any], packet: dict[str, Any]) -> dict[str, A
             "identifier_rules": {
                 "finding.id": "reviewer-created label such as F1",
                 "finding.evidence": "exact value from review_packet.reference_index.evidence_ids",
+                "candidate_fix.patch_id": "new lowercase slug such as fix-1; not a digest or supplied identifier",
             },
         },
     }

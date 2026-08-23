@@ -155,8 +155,10 @@ def test_request_distinguishes_finding_and_evidence_ids() -> None:
     assert payload["contract"]["identifier_rules"] == {
         "finding.id": "reviewer-created label such as F1",
         "finding.evidence": "exact value from review_packet.reference_index.evidence_ids",
+        "candidate_fix.patch_id": "new lowercase slug such as fix-1; not a digest or supplied identifier",
     }
     assert "implementation and test paths" in request["messages"][0]["content"]
+    assert "It is not a digest" in request["messages"][0]["content"]
 
 
 @pytest.mark.parametrize(
