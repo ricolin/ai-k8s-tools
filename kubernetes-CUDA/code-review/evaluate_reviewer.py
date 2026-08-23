@@ -10,6 +10,7 @@ from quality_gate import validate_response_text
 
 
 STAGE_ORDER = ("foundation", "A", "B", "C")
+JSON_RESPONSE_PREFIXES = frozenset(("", "{", '{"reviewer_identity":'))
 
 
 def canonical_json(value: Any) -> bytes:
@@ -63,7 +64,10 @@ def load_config(path: Path) -> dict[str, Any]:
     require(Path(config["prompts_path"]).is_absolute(), "prompts path must be absolute")
     require(Path(config["output_dir"]).is_absolute(), "output path must be absolute")
     require(1 <= int(config.get("max_new_tokens", 0)) <= 4096, "max_new_tokens is invalid")
-    require(config.get("response_prefix", "") in {"", "{"}, "unsupported response prefix")
+    require(
+        config.get("response_prefix", "") in JSON_RESPONSE_PREFIXES,
+        "unsupported response prefix",
+    )
     return config
 
 

@@ -222,8 +222,18 @@ def test_code_review_runtime_supports_explicit_json_prefill() -> None:
     runtime = (ROOT / "kubernetes-CUDA/common/serve_text_adapter.py").read_text()
     evaluator = (ROOT / "kubernetes-CUDA/code-review/evaluate_reviewer.py").read_text()
 
-    assert 'response_prefix in {"", "{"}' in runtime
-    assert 'config.get("response_prefix", "") in {"", "{"}' in evaluator
+    required_prefix = '{"reviewer_identity":'
+    assert required_prefix in runtime
+    assert required_prefix in evaluator
+
+
+def test_code_review_evaluator_accepts_reviewer_identity_prefill(tmp_path: Path) -> None:
+    value = comparison_config(tmp_path, [{"name": "foundation", "adapter_path": None}])
+    value["response_prefix"] = '{"reviewer_identity":'
+    config_path = tmp_path / "comparison.json"
+    config_path.write_text(json.dumps(value))
+
+    assert evaluator.load_config(config_path)["response_prefix"] == '{"reviewer_identity":'
 
 
 def comparison_config(tmp_path: Path, stages: list[dict[str, str | None]]) -> dict[str, object]:
