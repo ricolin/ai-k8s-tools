@@ -402,6 +402,59 @@ def test_collect_packet_preserves_utf8_byte_limits(tmp_path: Path) -> None:
     assert result["evidence"][0]["content"].encode("utf-8").decode("utf-8")
 
 
+def test_collect_packet_selects_exact_tracked_paths(tmp_path: Path) -> None:
+    checkout = tmp_path / "source"
+    (checkout / "src").mkdir(parents=True)
+    (checkout / "tests").mkdir()
+    (checkout / "src/first.py").write_text("FIRST = True\n")
+    (checkout / "src/target.py").write_text("TARGET = True\n")
+    (checkout / "tests/test_target.py").write_text("def test_target(): pass\n")
+    subprocess.run(["git", "init", str(checkout)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(checkout), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git", "-C", str(checkout), "-c", "user.name=Test", "-c",
+            "user.email=test@example.com", "commit", "-m", "fixture",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    commit = subprocess.run(
+        ["git", "-C", str(checkout), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    intent = parse_intent("go review https://github.com/ricolin/ai-build-tools/ on the python files")
+    source_lock = {
+        "id": f"repo-{commit[:12]}",
+        "repository": intent["repository"],
+        "commit": commit,
+    }
+
+    result = collect_packet(
+        intent,
+        source_lock,
+        release(),
+        "python-unit",
+        checkout,
+        include_paths=["src/target.py", "tests/test_target.py"],
+    )
+
+    assert result["source"]["requested_paths"] == ["src/target.py", "tests/test_target.py"]
+    assert [item["path"] for item in result["evidence"]] == ["src/target.py", "tests/test_target.py"]
+
+    with pytest.raises(ContractError, match="include path is not tracked"):
+        collect_packet(
+            intent,
+            source_lock,
+            release(),
+            "python-unit",
+            checkout,
+            include_paths=["src/missing.py"],
+        )
+
+
 def test_green_gate_rejects_mismatched_source_lock() -> None:
     final = green_response()
     value = packet()

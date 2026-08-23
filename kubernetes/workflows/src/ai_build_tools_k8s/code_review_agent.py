@@ -235,6 +235,7 @@ def collect_packet(
     max_files: int = 8,
     max_file_bytes: int = 4096,
     max_total_bytes: int = 24576,
+    include_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     validate_release(release)
     require(intent.get("schema_version") == SCHEMA_VERSION, "unsupported intent schema")
@@ -259,7 +260,21 @@ def collect_packet(
     evidence: list[dict[str, Any]] = []
     total = 0
     tracked_paths = sorted(value for value in git_output(checkout, "ls-files", "-z").split("\0") if value)
-    for relative in tracked_paths:
+    selected_paths = tracked_paths
+    if include_paths:
+        require(len(include_paths) == len(set(include_paths)), "include paths contain duplicates")
+        tracked = set(tracked_paths)
+        for value in include_paths:
+            path = Path(value)
+            require(
+                bool(value) and not path.is_absolute() and path.as_posix() == value
+                and ".." not in path.parts and ".git" not in path.parts,
+                f"include path is invalid: {value}",
+            )
+            require(value in tracked, f"include path is not tracked: {value}")
+            require(path.suffix.lower() in suffixes, f"include path is outside the language scope: {value}")
+        selected_paths = list(include_paths)
+    for relative in selected_paths:
         if len(evidence) >= max_files or total >= max_total_bytes:
             break
         path = checkout / relative
@@ -304,6 +319,7 @@ def collect_packet(
             "repository": source_lock["repository"],
             "commit": commit,
             "requested_languages": languages,
+            "requested_paths": list(include_paths or []),
             "files_included": len(evidence),
             "content_bytes": total,
             "limits": {
@@ -609,6 +625,7 @@ def build_parser() -> argparse.ArgumentParser:
     packet.add_argument("--max-files", type=int, default=8)
     packet.add_argument("--max-file-bytes", type=int, default=4096)
     packet.add_argument("--max-total-bytes", type=int, default=24576)
+    packet.add_argument("--include-path", action="append", default=[])
     packet.add_argument("--output", required=True)
 
     followup = commands.add_parser("create-followup-packet")
@@ -660,6 +677,7 @@ def main() -> None:
                     args.max_files,
                     args.max_file_bytes,
                     args.max_total_bytes,
+                    args.include_path,
                 ),
             )
         elif args.command == "create-followup-packet":
