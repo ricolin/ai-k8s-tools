@@ -71,6 +71,20 @@ def test_image_jobs_have_explicit_gpu_scope_and_offline_inputs() -> None:
     assert train_container["resources"]["limits"]["nvidia.com/gpu"] == 8
     assert generate_container["resources"]["limits"]["nvidia.com/gpu"] == 1
     assert training["spec"]["template"]["spec"]["automountServiceAccountToken"] is False
+    assert training["spec"]["template"]["spec"]["securityContext"] == {
+        "runAsNonRoot": True,
+        "runAsUser": 65532,
+        "runAsGroup": 65532,
+        "fsGroup": 65532,
+        "seccompProfile": {"type": "RuntimeDefault"},
+    }
+    assert train_container["securityContext"] == {
+        "allowPrivilegeEscalation": False,
+        "capabilities": {"drop": ["ALL"]},
+        "runAsNonRoot": True,
+        "runAsUser": 65532,
+        "runAsGroup": 65532,
+    }
     assert "tolerations" not in training["spec"]["template"]["spec"]
     assert {item["name"]: item["value"] for item in train_container["env"]}["HF_HUB_OFFLINE"] == "1"
     assert {item["name"]: item for item in training["spec"]["template"]["spec"]["volumes"]}["dshm"] == {

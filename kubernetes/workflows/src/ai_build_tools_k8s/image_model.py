@@ -41,7 +41,13 @@ def validate_comparison_prompts(path: Path) -> dict[str, Any]:
 
 
 def _pod_security() -> dict[str, Any]:
-    return {"allowPrivilegeEscalation": False, "capabilities": {"drop": ["ALL"]}}
+    return {
+        "allowPrivilegeEscalation": False,
+        "capabilities": {"drop": ["ALL"]},
+        "runAsNonRoot": True,
+        "runAsUser": 65532,
+        "runAsGroup": 65532,
+    }
 
 
 def render_image_job(
@@ -72,7 +78,13 @@ def render_image_job(
     pod_spec: dict[str, Any] = {
         "restartPolicy": "Never",
         "automountServiceAccountToken": False,
-        "securityContext": {"seccompProfile": {"type": "RuntimeDefault"}},
+        "securityContext": {
+            "runAsNonRoot": True,
+            "runAsUser": 65532,
+            "runAsGroup": 65532,
+            "fsGroup": 65532,
+            "seccompProfile": {"type": "RuntimeDefault"},
+        },
         "containers": [
             {
                 "name": mode,

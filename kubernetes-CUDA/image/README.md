@@ -71,6 +71,18 @@ python kubernetes-CUDA/image/generate_demo_dataset.py \
 This procedural corpus is useful for workflow validation only. A production
 release requires a curated, licensed dataset and independent quality review.
 
+## Foundation materialization
+
+Pin the Hugging Face repository revision, then hash the model payload rather
+than client transport metadata. `huggingface-cli download --local-dir` may
+create a `.cache` directory whose contents depend on the client and transfer
+history. Preserve its file list as acquisition evidence, remove only that
+transport directory, and seal the remaining model tree before training.
+
+The resulting payload digest is the `base_digest` consumed by every training
+and generation configuration. Do not compare a raw download tree that still
+contains `.cache` with a normalized payload tree.
+
 ## Render training and generation Jobs
 
 ```bash
@@ -103,3 +115,8 @@ Foundation, A, and B generation configs must reference the same immutable
 comparison prompt manifest. The renderer and generator do not add
 release-specific prompt text. Release C remains a separate optional
 cross-backbone implementation and must not reuse SDXL adapter tensors.
+
+Training writes `training-command.json` and `training-result.json` beside the
+adapter directory. Automation must validate `training-result.json`; it records
+the base, dataset, parent, config, adapter, GPU-count, and effective-batch
+identities needed to resume a completed stage without retraining it.
