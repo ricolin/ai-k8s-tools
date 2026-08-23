@@ -6,11 +6,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from quality_gate import validate_response_text
+from quality_gate import normalize_response_text, validate_response_text
 
 
 STAGE_ORDER = ("foundation", "A", "B", "C")
-JSON_RESPONSE_PREFIXES = frozenset(("", "{", '{"reviewer_identity":'))
 
 
 def canonical_json(value: Any) -> bytes:
@@ -64,10 +63,7 @@ def load_config(path: Path) -> dict[str, Any]:
     require(Path(config["prompts_path"]).is_absolute(), "prompts path must be absolute")
     require(Path(config["output_dir"]).is_absolute(), "output path must be absolute")
     require(1 <= int(config.get("max_new_tokens", 0)) <= 4096, "max_new_tokens is invalid")
-    require(
-        config.get("response_prefix", "") in JSON_RESPONSE_PREFIXES,
-        "unsupported response prefix",
-    )
+    require(config.get("response_prefix", "") in {"", "{"}, "unsupported response prefix")
     return config
 
 
@@ -126,23 +122,29 @@ def evaluate(config_path: Path) -> None:
                 generated[0, inputs["input_ids"].shape[1] :],
                 skip_special_tokens=True,
             )
+            raw_response = response
+            response, normalizations = normalize_response_text(response)
             parsed, errors = validate_response_text(response)
             if parsed is not None:
                 response = canonical_json(parsed).decode()
-            records.append(
-                {
-                    "schema_version": "1.0.0",
-                    "stage": stage["name"],
-                    "prompt_id": prompt["id"],
-                    "expected_reviewer_identity": prompt["expected_reviewer_identity"],
-                    "foundation_digest": config["foundation_digest"],
-                    "adapter_digest": stage.get("adapter_digest"),
-                    "prompt_digest": f"sha256:{hashlib.sha256(canonical_json(prompt)).hexdigest()}",
-                    "decoding": {"do_sample": False, "max_new_tokens": int(config["max_new_tokens"])},
-                    "contract_errors": errors,
-                    "response": response,
-                }
-            )
+            record = {
+                "schema_version": "1.0.0",
+                "stage": stage["name"],
+                "prompt_id": prompt["id"],
+                "expected_reviewer_identity": prompt["expected_reviewer_identity"],
+                "foundation_digest": config["foundation_digest"],
+                "adapter_digest": stage.get("adapter_digest"),
+                "prompt_digest": f"sha256:{hashlib.sha256(canonical_json(prompt)).hexdigest()}",
+                "decoding": {"do_sample": False, "max_new_tokens": int(config["max_new_tokens"])},
+                "contract_errors": errors,
+                "response": response,
+                "response_normalizations": list(normalizations),
+            }
+            if normalizations:
+                record["raw_response_sha256"] = (
+                    f"sha256:{hashlib.sha256(raw_response.encode()).hexdigest()}"
+                )
+            records.append(record)
         del model
         torch.cuda.empty_cache()
     responses = output / "responses.jsonl"

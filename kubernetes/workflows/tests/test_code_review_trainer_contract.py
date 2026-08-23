@@ -163,6 +163,36 @@ def test_quality_gate_canonicalizes_unescaped_string_newlines() -> None:
     assert "response is not one JSON object" not in errors
 
 
+def test_quality_gate_normalizes_exact_qwen_template_brace_wrapper() -> None:
+    generated = generator.record("C", 0)
+    expected = generated["messages"][2]["content"]
+    raw = expected[:1] + "%" + expected[1:] + "%}"
+
+    value, errors = quality_gate.validate_response_text(raw)
+
+    assert value is not None
+    assert errors == []
+    assert quality_gate.normalize_response_text(raw)[0] == expected
+    assert quality_gate.normalize_response_text(raw)[1] == (
+        "qwen-template-brace-wrapper",
+    )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        'prefix {"reviewer_identity":"value"}',
+        '{%not-json%}',
+        '{%{"reviewer_identity":"value"}%} trailing',
+    ],
+)
+def test_quality_gate_rejects_non_exact_template_wrapper(raw: str) -> None:
+    value, errors = quality_gate.validate_response_text(raw)
+
+    assert value is None
+    assert errors == ["response is not one JSON object"]
+
+
 def test_comparison_prompts_match_live_request_shape() -> None:
     prompts = generator.comparison_prompts()
 
@@ -222,18 +252,10 @@ def test_code_review_runtime_supports_explicit_json_prefill() -> None:
     runtime = (ROOT / "kubernetes-CUDA/common/serve_text_adapter.py").read_text()
     evaluator = (ROOT / "kubernetes-CUDA/code-review/evaluate_reviewer.py").read_text()
 
-    required_prefix = '{"reviewer_identity":'
-    assert required_prefix in runtime
-    assert required_prefix in evaluator
-
-
-def test_code_review_evaluator_accepts_reviewer_identity_prefill(tmp_path: Path) -> None:
-    value = comparison_config(tmp_path, [{"name": "foundation", "adapter_path": None}])
-    value["response_prefix"] = '{"reviewer_identity":'
-    config_path = tmp_path / "comparison.json"
-    config_path.write_text(json.dumps(value))
-
-    assert evaluator.load_config(config_path)["response_prefix"] == '{"reviewer_identity":'
+    assert 'response_prefix in {"", "{"}' in runtime
+    assert 'config.get("response_prefix", "") in {"", "{"}' in evaluator
+    assert "normalize_response_text(content)" in runtime
+    assert "response_normalizations" in evaluator
 
 
 def comparison_config(tmp_path: Path, stages: list[dict[str, str | None]]) -> dict[str, object]:

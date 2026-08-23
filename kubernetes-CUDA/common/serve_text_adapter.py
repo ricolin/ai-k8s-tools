@@ -9,6 +9,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from quality_gate import normalize_response_text
+
 
 def canonical_json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
@@ -66,9 +68,6 @@ def openai_response(model_name: str, content: str, prompt_tokens: int, completio
     }
 
 
-JSON_RESPONSE_PREFIXES = frozenset(("", "{", '{"reviewer_identity":'))
-
-
 class TextAdapterServer:
     def __init__(
         self,
@@ -85,7 +84,7 @@ class TextAdapterServer:
         require(f"sha256:{sha256_tree(foundation)}" == foundation_digest, "foundation digest mismatch")
         require(f"sha256:{sha256_tree(adapter)}" == adapter_digest, "adapter digest mismatch")
         require(1 <= max_new_tokens <= 4096, "max_new_tokens is invalid")
-        require(response_prefix in JSON_RESPONSE_PREFIXES, "unsupported response prefix")
+        require(response_prefix in {"", "{"}, "unsupported response prefix")
 
         import torch
         from peft import PeftModel
@@ -134,6 +133,7 @@ class TextAdapterServer:
             )
         generated_tokens = generated[0, inputs["input_ids"].shape[1] :]
         content = self.response_prefix + self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        content, _ = normalize_response_text(content)
         parsed = json.loads(content, strict=False)
         require(isinstance(parsed, dict), "generated response must be one JSON object")
         compact = canonical_json(parsed).decode()

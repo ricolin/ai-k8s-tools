@@ -33,7 +33,14 @@ TOOL_ARGUMENT_KEYS = {
 }
 
 
+def normalize_response_text(raw: str) -> tuple[str, tuple[str, ...]]:
+    if raw.startswith("{%") and raw.endswith("%}"):
+        return raw[:1] + raw[2:-2], ("qwen-template-brace-wrapper",)
+    return raw, ()
+
+
 def validate_response_text(raw: str) -> tuple[dict[str, Any] | None, list[str]]:
+    raw, _ = normalize_response_text(raw)
     try:
         value = json.loads(raw, strict=False)
     except json.JSONDecodeError:
