@@ -21,3 +21,6 @@ helm template local-path-storage \
 or credentials in this public chart. Production deployments that require
 replicated or multi-node storage should publish a different storage profile
 instead of presenting local-path as shared storage.
+
+The promoted source commit, successful publication workflow, package checksum,
+and registry-returned OCI digest are recorded in `artifacts.lock.yaml`.
