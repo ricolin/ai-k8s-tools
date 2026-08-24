@@ -1,15 +1,6 @@
 {{- include "local-path-storage.validate" . -}}
 {{- if .Values.enabled }}
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ .Values.namespace }}
-  labels:
-    pod-security.kubernetes.io/enforce: privileged
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
----
-apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: local-path-provisioner-service-account
@@ -69,7 +60,7 @@ roleRef:
   name: {{ .Release.Name }}-local-path-provisioner
 subjects:
   - kind: ServiceAccount
-    name: local-path-provisioner
+    name: local-path-provisioner-service-account
     namespace: {{ .Values.namespace }}
 ---
 apiVersion: v1

@@ -10,19 +10,20 @@ helm template inactive "${chart_dir}" >"${temporary}/inactive.yaml"
 
 helm template local-path "${chart_dir}" --set enabled=true \
   >"${temporary}/active.yaml"
-for kind in Namespace ServiceAccount Role ClusterRole RoleBinding \
+for kind in ServiceAccount Role ClusterRole RoleBinding \
   ClusterRoleBinding ConfigMap Deployment StorageClass; do
   grep -Fq "kind: ${kind}" "${temporary}/active.yaml"
 done
-grep -Fq 'pod-security.kubernetes.io/enforce: privileged' \
-  "${temporary}/active.yaml"
+! grep -Fq 'kind: Namespace' "${temporary}/active.yaml"
 grep -Fq 'docker.io/rancher/local-path-provisioner@sha256:' \
   "${temporary}/active.yaml"
 grep -Fq 'docker.io/library/busybox@sha256:' "${temporary}/active.yaml"
 grep -Fq 'serviceAccountName: local-path-provisioner-service-account' \
   "${temporary}/active.yaml"
 test "$(grep -Fc 'name: local-path-provisioner-service-account' \
-  "${temporary}/active.yaml")" -eq 2
+  "${temporary}/active.yaml")" -eq 3
+! grep -Eq '^    name: local-path-provisioner$' \
+  "${temporary}/active.yaml"
 grep -Fq 'storageclass.kubernetes.io/is-default-class: "true"' \
   "${temporary}/active.yaml"
 

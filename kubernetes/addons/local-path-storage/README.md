@@ -6,6 +6,12 @@ helper images digest-pinned, creates the StorageClass only when enabled, and
 defaults to `WaitForFirstConsumer` so a PVC is bound on the workload node that
 will consume it.
 
+The release namespace is an installer-owned prerequisite. For CAAPH, set
+`options.install.createNamespace: true`; for direct Helm use, pass
+`--create-namespace`. The chart deliberately does not render a `Namespace`
+object, avoiding a failed first upgrade after Helm or CAAPH creates the release
+namespace.
+
 The provisioner and helper Pods use the upstream
 `local-path-provisioner-service-account` identity. Keep the ServiceAccount,
 RoleBinding subject, and Deployment field synchronized; the provisioner copies
@@ -19,6 +25,11 @@ namespace, quota, retained PVC, and write/read acceptance Job.
 ./kubernetes/addons/local-path-storage/test-render.sh
 helm template local-path-storage \
   kubernetes/addons/local-path-storage \
+  --set enabled=true
+
+helm install local-path-storage \
+  kubernetes/addons/local-path-storage \
+  --namespace local-path-storage --create-namespace \
   --set enabled=true
 ```
 
