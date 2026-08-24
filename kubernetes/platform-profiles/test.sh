@@ -7,7 +7,7 @@ for chart in ai-foundation ai-platform-core ai-scheduling-kueue \
   chart_dir=${root}/kubernetes/addons/${chart}
   helm lint "${chart_dir}" >/dev/null
   if [[ ${chart} != ai-workflow-bootstrap ]]; then
-    test -s "${chart_dir}/crds/resources.yaml" || {
+    test -n "$(find "${chart_dir}/crds" -name 'resources-*.yaml' -print -quit)" || {
       echo "missing CRD pre-install phase for ${chart}" >&2
       exit 1
     }

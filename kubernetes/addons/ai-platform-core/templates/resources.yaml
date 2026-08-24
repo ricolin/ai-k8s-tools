@@ -1,4 +1,6 @@
 {{- if .Values.enabled }}
-{{ .Files.Get "files/resources.yaml" }}
+{{- range $path, $_ := .Files.Glob "files/resources-*.yaml" }}
+{{ $.Files.Get $path }}
+---
 {{- end }}
-
+{{- end }}

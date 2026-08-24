@@ -78,8 +78,14 @@ for chart in ai-foundation ai-platform-core ai-scheduling-kueue \
     "${extra[@]}"
   "${profile_root}/split-crds.py" \
     --input "${work}/${chart}.pinned.yaml" \
-    --resources "${root}/kubernetes/addons/${chart}/files/resources.yaml" \
-    --crds "${root}/kubernetes/addons/${chart}/crds/resources.yaml"
+    --resources "${work}/${chart}.resources.yaml" \
+    --crds "${work}/${chart}.crds.yaml"
+  "${profile_root}/split-resources.py" \
+    --input "${work}/${chart}.resources.yaml" \
+    --output-dir "${root}/kubernetes/addons/${chart}/files"
+  "${profile_root}/split-resources.py" \
+    --input "${work}/${chart}.crds.yaml" \
+    --output-dir "${root}/kubernetes/addons/${chart}/crds"
 done
 
 "${profile_root}/test.sh"
