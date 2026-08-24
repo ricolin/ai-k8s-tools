@@ -184,6 +184,9 @@ grep -F 'namespace=${WORKLOAD_NAMESPACE:-ai-workflows}' "${profile_verifier}" >/
 grep -F 'require_deployment kubeflow' "${profile_verifier}" >/dev/null
 grep -F 'require_deployment kueue-system' "${profile_verifier}" >/dev/null
 grep -F 'require_deployment kubeflow-system' "${profile_verifier}" >/dev/null
+grep -F 'app.kubernetes.io/name=nvidia-ai-readiness' \
+  "${profile_verifier}" >/dev/null
+grep -F 'nvidia-ai-readiness-evidence' "${profile_verifier}" >/dev/null
 if grep -Fq 'experiments.kubeflow.org' "${profile_verifier}"; then
   echo 'profile verifier must not require the excluded Katib profile' >&2
   exit 1

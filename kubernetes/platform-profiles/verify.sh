@@ -62,6 +62,23 @@ test "$("${kubectl_bin}" -n gpu-operator get clusterpolicy cluster-policy \
     ([.items[].status.capacity["nvidia.com/gpu"] // "0" | tonumber] | add) == $expected and
     ([.items[].status.allocatable["nvidia.com/gpu"] // "0" | tonumber] | add) == $expected
   '
+"${kubectl_bin}" -n gpu-operator get jobs \
+  -l app.kubernetes.io/name=nvidia-ai-readiness -o json | \
+  "${jq_bin}" -e '
+    .items | length == 1 and
+    all(.[]; any(.status.conditions[]?;
+      .type == "Complete" and .status == "True"))
+  '
+"${kubectl_bin}" -n gpu-operator get configmap \
+  nvidia-ai-readiness-evidence -o json | \
+  "${jq_bin}" -e --argjson expected "${expected_gpu_count}" '
+    .data["evidence.json"] | fromjson |
+    .schema_version == "1.0.0" and
+    .status == "PASS" and
+    .expected.gpu_nodes == 1 and
+    .expected.gpus_per_node == $expected and
+    .expected.full_node_gpus == $expected
+  '
 
 "${kubectl_bin}" get storageclass "${storage_class}" -o json | \
   "${jq_bin}" -e '
