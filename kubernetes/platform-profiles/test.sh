@@ -66,6 +66,96 @@ for document in yaml.safe_load_all(open(sys.argv[1])):
     ):
         raise SystemExit("ai-platform-core must not own Namespace/kubeflow")
 PY
+foundation_output=$(mktemp /tmp/ai-foundation.issuer.XXXXXX)
+helm template ai-foundation "${root}/kubernetes/addons/ai-foundation" \
+  >"${foundation_output}"
+python3 - "${foundation_output}" "${core_output}" <<'PY'
+import sys
+import yaml
+
+foundation_path, core_path = sys.argv[1:]
+
+
+def identities(path):
+    return {
+        (document.get("kind"), document.get("metadata", {}).get("name"))
+        for document in yaml.safe_load_all(open(path))
+        if isinstance(document, dict)
+    }
+
+
+issuer = ("ClusterIssuer", "kubeflow-self-signing-issuer")
+if issuer in identities(foundation_path):
+    raise SystemExit("ai-foundation must not apply an issuer before its webhook")
+if issuer not in identities(core_path):
+    raise SystemExit("ai-platform-core must own the cert-manager-dependent issuer")
+PY
+python3 - "${root}" <<'PY'
+import pathlib
+import sys
+import yaml
+
+root = pathlib.Path(sys.argv[1])
+required = {
+    (
+        "node-role.kubernetes.io/control-plane",
+        "Exists",
+        "NoSchedule",
+    ),
+    ("node-role.kubernetes.io/master", "Exists", "NoSchedule"),
+}
+
+
+def pod_spec(document):
+    kind = document.get("kind")
+    spec = document.get("spec", {})
+    if kind == "Pod":
+        return spec
+    if kind == "CronJob":
+        return (
+            spec.get("jobTemplate", {})
+            .get("spec", {})
+            .get("template", {})
+            .get("spec")
+        )
+    if kind in {
+        "DaemonSet",
+        "Deployment",
+        "Job",
+        "ReplicaSet",
+        "StatefulSet",
+    }:
+        return spec.get("template", {}).get("spec")
+    return None
+
+
+for chart in ("ai-foundation", "ai-platform-core", "ai-serving-h200"):
+    manifests = root / "kubernetes" / "addons" / chart / "files"
+    workloads = 0
+    for path in sorted(manifests.glob("resources-*.yaml")):
+        for document in yaml.safe_load_all(path.read_text()):
+            if not isinstance(document, dict):
+                continue
+            spec = pod_spec(document)
+            if not isinstance(spec, dict):
+                continue
+            workloads += 1
+            actual = {
+                (item.get("key"), item.get("operator"), item.get("effect"))
+                for item in spec.get("tolerations", [])
+            }
+            missing = required - actual
+            if missing:
+                identity = (
+                    document.get("kind"),
+                    document.get("metadata", {}).get("name"),
+                )
+                raise SystemExit(
+                    f"{chart} workload {identity} misses tolerations: {missing}"
+                )
+    if not workloads:
+        raise SystemExit(f"{chart} contains no workload resources")
+PY
 helm template ai-scheduling-kueue "${root}/kubernetes/addons/ai-scheduling-kueue" \
   | grep -F 'trainer.kubeflow.org/trainjob' >/dev/null
 helm template ai-training-h200 "${root}/kubernetes/addons/ai-training-h200" \

@@ -1702,8 +1702,8 @@ spec:
     metadata:
       annotations:
         prometheus.io/path: /metrics
-        prometheus.io/port: "9402"
-        prometheus.io/scrape: "true"
+        prometheus.io/port: '9402'
+        prometheus.io/scrape: 'true'
       labels:
         app: cert-manager
         app.kubernetes.io/component: controller
@@ -1757,6 +1757,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: cert-manager
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1780,8 +1787,8 @@ spec:
     metadata:
       annotations:
         prometheus.io/path: /metrics
-        prometheus.io/port: "9402"
-        prometheus.io/scrape: "true"
+        prometheus.io/port: '9402'
+        prometheus.io/scrape: 'true'
       labels:
         app: cainjector
         app.kubernetes.io/component: cainjector
@@ -1819,6 +1826,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: cert-manager-cainjector
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1842,8 +1856,8 @@ spec:
     metadata:
       annotations:
         prometheus.io/path: /metrics
-        prometheus.io/port: "9402"
-        prometheus.io/scrape: "true"
+        prometheus.io/port: '9402'
+        prometheus.io/scrape: 'true'
       labels:
         app: webhook
         app.kubernetes.io/component: webhook
@@ -1912,6 +1926,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: cert-manager-webhook
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
@@ -1990,17 +2011,6 @@ webhooks:
     - '*/*'
   sideEffects: None
   timeoutSeconds: 30
----
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  labels:
-    app.kubernetes.io/component: cert-manager
-    app.kubernetes.io/name: cert-manager
-    kustomize.component: cert-manager
-  name: kubeflow-self-signing-issuer
-spec:
-  selfSigned: {}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

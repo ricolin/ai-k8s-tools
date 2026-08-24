@@ -1922,7 +1922,7 @@ metadata:
     app.kubernetes.io/component: kserve
     app.kubernetes.io/name: kserve
     control-plane: kserve-controller-manager
-    controller-tools.k8s.io: "1.0"
+    controller-tools.k8s.io: '1.0'
   name: kserve-controller-manager
   namespace: kubeflow
 spec:
@@ -1931,17 +1931,17 @@ spec:
       app: kserve
       app.kubernetes.io/name: kserve
       control-plane: kserve-controller-manager
-      controller-tools.k8s.io: "1.0"
+      controller-tools.k8s.io: '1.0'
   template:
     metadata:
       annotations:
         kubectl.kubernetes.io/default-container: manager
-        sidecar.istio.io/inject: "false"
+        sidecar.istio.io/inject: 'false'
       labels:
         app: kserve
         app.kubernetes.io/name: kserve
         control-plane: kserve-controller-manager
-        controller-tools.k8s.io: "1.0"
+        controller-tools.k8s.io: '1.0'
     spec:
       containers:
       - args:
@@ -2027,6 +2027,13 @@ spec:
         secret:
           defaultMode: 420
           secretName: kserve-webhook-server-cert
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -2036,7 +2043,7 @@ metadata:
     app.kubernetes.io/component: localmodel
     app.kubernetes.io/name: kserve
     control-plane: kserve-localmodel-controller-manager
-    controller-tools.k8s.io: "1.0"
+    controller-tools.k8s.io: '1.0'
   name: kserve-localmodel-controller-manager
   namespace: kubeflow
 spec:
@@ -2045,7 +2052,7 @@ spec:
       app: kserve
       app.kubernetes.io/name: kserve
       control-plane: kserve-localmodel-controller-manager
-      controller-tools.k8s.io: "1.0"
+      controller-tools.k8s.io: '1.0'
   template:
     metadata:
       annotations:
@@ -2054,7 +2061,7 @@ spec:
         app: kserve
         app.kubernetes.io/name: kserve
         control-plane: kserve-localmodel-controller-manager
-        controller-tools.k8s.io: "1.0"
+        controller-tools.k8s.io: '1.0'
     spec:
       containers:
       - command:
@@ -2116,6 +2123,13 @@ spec:
         secret:
           defaultMode: 420
           secretName: localmodel-webhook-server-cert
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -2125,7 +2139,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/name: kserve
     control-plane: llmisvc-controller-manager
-    controller-tools.k8s.io: "1.0"
+    controller-tools.k8s.io: '1.0'
   name: llmisvc-controller-manager
   namespace: kubeflow
 spec:
@@ -2134,7 +2148,7 @@ spec:
       app: kserve
       app.kubernetes.io/name: kserve
       control-plane: llmisvc-controller-manager
-      controller-tools.k8s.io: "1.0"
+      controller-tools.k8s.io: '1.0'
   template:
     metadata:
       annotations:
@@ -2144,7 +2158,7 @@ spec:
         app.kubernetes.io/component: controller
         app.kubernetes.io/name: kserve
         control-plane: llmisvc-controller-manager
-        controller-tools.k8s.io: "1.0"
+        controller-tools.k8s.io: '1.0'
     spec:
       containers:
       - args:
@@ -2216,6 +2230,13 @@ spec:
         secret:
           defaultMode: 420
           secretName: llmisvc-webhook-server-cert
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate

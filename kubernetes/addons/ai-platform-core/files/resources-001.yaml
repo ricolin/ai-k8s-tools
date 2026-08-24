@@ -1405,6 +1405,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: kubeflow-pipelines-cache-deployer-sa
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1489,7 +1496,7 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: WEBHOOK_PORT
-          value: "8443"
+          value: '8443'
         image: ghcr.io/kubeflow/kfp-cache-server:2.16.1@sha256:7baa7696b18a323482d5acf034d5445b36ae3cf294e577efba725a71de297cc1
         imagePullPolicy: Always
         name: server
@@ -1519,6 +1526,13 @@ spec:
       - name: webhook-tls-certs
         secret:
           secretName: webhook-server-tls
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1539,7 +1553,7 @@ spec:
       labels:
         application-crd-id: kubeflow-pipelines
         component: metadata-envoy
-        sidecar.istio.io/inject: "false"
+        sidecar.istio.io/inject: 'false'
     spec:
       containers:
       - args:
@@ -1574,6 +1588,13 @@ spec:
       - configMap:
           name: metadata-envoy-configmap
         name: envoy-config
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1665,6 +1686,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: metadata-grpc-server
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1709,6 +1737,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: kubeflow-pipelines-metadata-writer
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1726,7 +1761,7 @@ spec:
   template:
     metadata:
       annotations:
-        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
       labels:
         app: ml-pipeline
         application-crd-id: kubeflow-pipelines
@@ -1734,11 +1769,11 @@ spec:
       containers:
       - env:
         - name: PUBLISH_LOGS
-          value: "true"
+          value: 'true'
         - name: LOG_LEVEL
           value: info
         - name: PIPELINE_LOG_LEVEL
-          value: "1"
+          value: '1'
         - name: AUTO_UPDATE_PIPELINE_DEFAULT_VERSION
           valueFrom:
             configMapKeyRef:
@@ -1751,7 +1786,7 @@ spec:
         - name: CLUSTER_DOMAIN
           value: cluster.local
         - name: OBJECTSTORECONFIG_SECURE
-          value: "false"
+          value: 'false'
         - name: OBJECTSTORECONFIG_BUCKETNAME
           valueFrom:
             configMapKeyRef:
@@ -1760,7 +1795,7 @@ spec:
         - name: OBJECTSTORECONFIG_HOST
           value: seaweedfs.kubeflow
         - name: OBJECTSTORECONFIG_PORT
-          value: "9000"
+          value: '9000'
         - name: DBCONFIG_USER
           valueFrom:
             secretKeyRef:
@@ -1915,6 +1950,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: ml-pipeline
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1932,7 +1974,7 @@ spec:
   template:
     metadata:
       annotations:
-        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
       labels:
         app: ml-pipeline-persistenceagent
         application-crd-id: kubeflow-pipelines
@@ -1944,9 +1986,9 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: TTL_SECONDS_AFTER_WORKFLOW_FINISH
-          value: "86400"
+          value: '86400'
         - name: NUM_WORKERS
-          value: "2"
+          value: '2'
         - name: LOG_LEVEL
           value: info
         image: ghcr.io/kubeflow/kfp-persistence-agent:2.16.1@sha256:7c87fd0872492126c26af9a6fe87684d23bebb9effd0d7cf5767b3ad44fd166e
@@ -1982,6 +2024,13 @@ spec:
               audience: pipelines.kubeflow.org
               expirationSeconds: 3600
               path: persistenceagent-sa-token
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1999,7 +2048,7 @@ spec:
   template:
     metadata:
       annotations:
-        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
       labels:
         app: ml-pipeline-scheduledworkflow
         application-crd-id: kubeflow-pipelines
@@ -2007,13 +2056,13 @@ spec:
       containers:
       - env:
         - name: METRICS_PORT
-          value: "9090"
+          value: '9090'
         - name: CLIENT_QPS
-          value: "10"
+          value: '10'
         - name: RESYNC_INTERVAL_SECONDS
-          value: "30"
+          value: '30'
         - name: CLIENT_BURST
-          value: "20"
+          value: '20'
         - name: LOG_LEVEL
           value: info
         - name: NAMESPACE
@@ -2057,6 +2106,13 @@ spec:
               audience: pipelines.kubeflow.org
               expirationSeconds: 3600
               path: scheduledworkflow-sa-token
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -2074,7 +2130,7 @@ spec:
   template:
     metadata:
       annotations:
-        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
       labels:
         app: ml-pipeline-ui
         application-crd-id: kubeflow-pipelines
@@ -2098,15 +2154,15 @@ spec:
               key: secretkey
               name: mlpipeline-minio-artifact
         - name: ALLOW_CUSTOM_VISUALIZATIONS
-          value: "true"
+          value: 'true'
         - name: FRONTEND_SERVER_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
         - name: ARGO_ARCHIVE_LOGS
-          value: "true"
+          value: 'true'
         - name: DISABLE_GKE_METADATA
-          value: "true"
+          value: 'true'
         - name: CLUSTER_DOMAIN
           valueFrom:
             configMapKeyRef:
@@ -2165,6 +2221,13 @@ spec:
       - configMap:
           name: ml-pipeline-ui-configmap
         name: config-volume
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -2182,7 +2245,7 @@ spec:
   template:
     metadata:
       annotations:
-        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
       labels:
         app: ml-pipeline-viewer-crd
         application-crd-id: kubeflow-pipelines
@@ -2190,7 +2253,7 @@ spec:
       containers:
       - env:
         - name: MAX_NUM_VIEWERS
-          value: "50"
+          value: '50'
         - name: NAMESPACE
           valueFrom:
             fieldRef:
@@ -2213,6 +2276,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: ml-pipeline-viewer-crd-service-account
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -2230,7 +2300,7 @@ spec:
   template:
     metadata:
       annotations:
-        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
       labels:
         app: ml-pipeline-visualizationserver
         application-crd-id: kubeflow-pipelines
@@ -2275,6 +2345,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: ml-pipeline-visualizationserver
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -2306,7 +2383,7 @@ spec:
         - --disable-log-bin
         env:
         - name: MYSQL_ALLOW_EMPTY_PASSWORD
-          value: "true"
+          value: 'true'
         image: mysql:8.4@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
         name: mysql
         ports:
@@ -2340,6 +2417,13 @@ spec:
       - name: mysql-persistent-storage
         persistentVolumeClaim:
           claimName: mysql-pv-claim
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -2381,52 +2465,26 @@ spec:
               command:
               - /bin/sh
               - -c
-              - |
-                # Wait up to 120 seconds  for SeaweedFS master to be ready
-                for i in $(seq 1 60); do
-                  if wget -q --spider http://127.0.0.1:8333/status; then
-                    break
-                  fi
-                  if [ "$i" -eq 60 ]; then
-                    echo "ERROR: SeaweedFS master did not become ready within 120 seconds"
-                    exit 1
-                  fi
-                  sleep 2
-                done
-
-                # Create bucket with retries (maximum 25 seconds)
-                for i in $(seq 1 5); do
-                  echo "s3.bucket.create --name mlpipeline" | /usr/bin/weed shell 2>&1 || true
-                  if echo "s3.bucket.list" | /usr/bin/weed shell 2>/dev/null | grep -q mlpipeline; then
-                    break
-                  fi
-                  if [ "$i" -eq 5 ]; then
-                    echo "ERROR: mlpipeline bucket not found after 5 attempts"
-                    exit 1
-                  fi
-                  sleep 5
-                done
-
-                # Configure admin user with retries (25s max)
-                for i in $(seq 1 5); do
-                  if echo "s3.configure -user kubeflow-admin -access_key $accesskey -secret_key $secretkey -actions Admin -apply" | /usr/bin/weed shell 2>&1; then
-                    break
-                  fi
-                  if [ "$i" -eq 5 ]; then
-                    echo "ERROR: Failed to configure kubeflow-admin after 5 attempts"
-                    exit 1
-                  fi
-                  sleep 5
-                done
-
-                # Verify bucket is accessible
-                if ! echo "s3.bucket.list" | /usr/bin/weed shell | grep -q mlpipeline; then
-                  echo "ERROR: mlpipeline bucket verification failed"
-                  exit 1
-                fi
-
-                # Signal successful initialization for the startup probe
-                touch /tmp/initialization-complete
+              - "# Wait up to 120 seconds  for SeaweedFS master to be ready\nfor i\
+                \ in $(seq 1 60); do\n  if wget -q --spider http://127.0.0.1:8333/status;\
+                \ then\n    break\n  fi\n  if [ \"$i\" -eq 60 ]; then\n    echo \"\
+                ERROR: SeaweedFS master did not become ready within 120 seconds\"\n\
+                \    exit 1\n  fi\n  sleep 2\ndone\n\n# Create bucket with retries\
+                \ (maximum 25 seconds)\nfor i in $(seq 1 5); do\n  echo \"s3.bucket.create\
+                \ --name mlpipeline\" | /usr/bin/weed shell 2>&1 || true\n  if echo\
+                \ \"s3.bucket.list\" | /usr/bin/weed shell 2>/dev/null | grep -q mlpipeline;\
+                \ then\n    break\n  fi\n  if [ \"$i\" -eq 5 ]; then\n    echo \"\
+                ERROR: mlpipeline bucket not found after 5 attempts\"\n    exit 1\n\
+                \  fi\n  sleep 5\ndone\n\n# Configure admin user with retries (25s\
+                \ max)\nfor i in $(seq 1 5); do\n  if echo \"s3.configure -user kubeflow-admin\
+                \ -access_key $accesskey -secret_key $secretkey -actions Admin -apply\"\
+                \ | /usr/bin/weed shell 2>&1; then\n    break\n  fi\n  if [ \"$i\"\
+                \ -eq 5 ]; then\n    echo \"ERROR: Failed to configure kubeflow-admin\
+                \ after 5 attempts\"\n    exit 1\n  fi\n  sleep 5\ndone\n\n# Verify\
+                \ bucket is accessible\nif ! echo \"s3.bucket.list\" | /usr/bin/weed\
+                \ shell | grep -q mlpipeline; then\n  echo \"ERROR: mlpipeline bucket\
+                \ verification failed\"\n  exit 1\nfi\n\n# Signal successful initialization\
+                \ for the startup probe\ntouch /tmp/initialization-complete\n"
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -2493,6 +2551,13 @@ spec:
       - name: data
         persistentVolumeClaim:
           claimName: seaweedfs-pvc
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -2562,6 +2627,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: argo
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -2702,7 +2774,7 @@ spec:
     metadata:
       labels:
         component: db
-        sidecar.istio.io/inject: "false"
+        sidecar.istio.io/inject: 'false'
       name: db
     spec:
       containers:
@@ -2748,6 +2820,13 @@ spec:
       - name: metadata-mysql
         persistentVolumeClaim:
           claimName: metadata-mysql
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -2763,10 +2842,10 @@ spec:
   template:
     metadata:
       annotations:
-        traffic.sidecar.istio.io/excludeOutboundPorts: "3306"
+        traffic.sidecar.istio.io/excludeOutboundPorts: '3306'
       labels:
         component: model-registry-server
-        sidecar.istio.io/inject: "true"
+        sidecar.istio.io/inject: 'true'
     spec:
       containers:
       - args:
@@ -2824,3 +2903,21 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: model-registry-server
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  labels:
+    app.kubernetes.io/component: cert-manager
+    app.kubernetes.io/name: cert-manager
+    kustomize.component: cert-manager
+  name: kubeflow-self-signing-issuer
+spec:
+  selfSigned: {}

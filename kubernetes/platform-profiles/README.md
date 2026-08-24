@@ -10,7 +10,7 @@ The profile set is intentionally split by lifecycle boundary:
 | Chart | Responsibility |
 |---|---|
 | `ai-foundation` | cert-manager and shared Kubeflow namespaces |
-| `ai-platform-core` | Kubeflow Pipelines and Model Registry |
+| `ai-platform-core` | cert-manager-dependent issuer, Kubeflow Pipelines, and Model Registry |
 | `ai-scheduling-kueue` | Kueue admission controller |
 | `ai-training-h200` | Kubeflow Trainer v2 and Torch runtime |
 | `ai-serving-h200` | KServe control plane |
@@ -47,3 +47,10 @@ repository `GITHUB_TOKEN` with package-write permission and publishes to
 The charts install controllers and cluster-birth defaults only. Datasets,
 training configurations, model releases, inference requests, and run evidence
 remain workload resources.
+
+The generated controller workloads tolerate both current and legacy
+control-plane taints. This permits an explicitly selected all-in-one AI control
+plane without removing the Kubernetes taint and is inert on worker-backed
+clusters. The cert-manager-dependent `ClusterIssuer` is intentionally owned by
+`ai-platform-core`, whose profile depends on a ready `ai-foundation`; keeping
+the issuer in the cert-manager release creates a webhook bootstrap race.

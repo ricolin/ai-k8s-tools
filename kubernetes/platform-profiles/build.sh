@@ -44,6 +44,12 @@ render_kustomize "${work}/ai-foundation.raw.yaml" \
   common/kubeflow-namespace/base \
   common/cert-manager/base \
   common/cert-manager/overlays/kubeflow
+"${profile_root}/drop-object.py" \
+  --input "${work}/ai-foundation.raw.yaml" \
+  --output "${work}/ai-foundation.filtered.yaml" \
+  --removed-output "${work}/kubeflow-self-signing-issuer.yaml" \
+  --kind ClusterIssuer --name kubeflow-self-signing-issuer
+mv "${work}/ai-foundation.filtered.yaml" "${work}/ai-foundation.raw.yaml"
 render_kustomize "${work}/ai-platform-core.raw.yaml" \
   applications/pipeline/upstream/cluster-scoped-resources \
   applications/pipeline/upstream/env/platform-agnostic \
@@ -53,6 +59,9 @@ render_kustomize "${work}/ai-platform-core.raw.yaml" \
   --output "${work}/ai-platform-core.filtered.yaml" \
   --kind Namespace --name kubeflow
 mv "${work}/ai-platform-core.filtered.yaml" "${work}/ai-platform-core.raw.yaml"
+printf '\n---\n' >>"${work}/ai-platform-core.raw.yaml"
+cat "${work}/kubeflow-self-signing-issuer.yaml" \
+  >>"${work}/ai-platform-core.raw.yaml"
 
 helm template ai-scheduling "${work}/kueue.tgz" \
   --namespace kueue-system --include-crds \
@@ -69,6 +78,13 @@ helm template ai-training "${work}/trainer.tgz" \
   >"${work}/ai-training-h200.raw.yaml"
 
 render_kustomize "${work}/ai-serving-h200.raw.yaml" applications/kserve/kserve
+
+for chart in ai-foundation ai-platform-core ai-serving-h200; do
+  "${profile_root}/add-control-plane-tolerations.py" \
+    --input "${work}/${chart}.raw.yaml" \
+    --output "${work}/${chart}.tolerations.yaml"
+  mv "${work}/${chart}.tolerations.yaml" "${work}/${chart}.raw.yaml"
+done
 
 for chart in ai-foundation ai-platform-core ai-scheduling-kueue \
   ai-training-h200 ai-serving-h200; do

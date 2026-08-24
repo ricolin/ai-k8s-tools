@@ -2,6 +2,5 @@ apiVersion: v2
 name: ai-serving-h200
 description: Pinned KServe control plane for H200 model-serving workflows
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "0.18.0"
-
