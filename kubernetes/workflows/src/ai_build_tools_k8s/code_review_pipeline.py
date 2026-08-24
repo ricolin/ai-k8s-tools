@@ -1,7 +1,23 @@
 import argparse
+import json
 from pathlib import Path
+from typing import Any
 
-from kfp import compiler, dsl, kubernetes
+from kfp import Client, compiler, dsl, kubernetes
+
+
+RUN_ARGUMENTS = {
+    "trainjob_a_name",
+    "trainjob_b_name",
+    "trainjob_c_name",
+    "trainer_image",
+    "trainer_image_id",
+    "pvc_name",
+    "config_a_path",
+    "config_b_path",
+    "config_c_path",
+    "evidence_root",
+}
 
 
 def make_pipeline(workflow_image: str):
@@ -120,13 +136,83 @@ def make_pipeline(workflow_image: str):
     return pipeline
 
 
+def load_run_arguments(path: Path) -> dict[str, Any]:
+    value = json.loads(path.read_text())
+    if not isinstance(value, dict):
+        raise ValueError("pipeline arguments must be a JSON object")
+    missing = RUN_ARGUMENTS - value.keys()
+    extra = value.keys() - RUN_ARGUMENTS
+    if missing or extra:
+        details = []
+        if missing:
+            details.append(f"missing: {', '.join(sorted(missing))}")
+        if extra:
+            details.append(f"unknown: {', '.join(sorted(extra))}")
+        raise ValueError("invalid pipeline arguments (" + "; ".join(details) + ")")
+    if not all(isinstance(value[key], str) and value[key] for key in RUN_ARGUMENTS):
+        raise ValueError("every pipeline argument must be a non-empty string")
+    return value
+
+
+def submit_run(
+    host: str,
+    package: Path,
+    run_name: str,
+    arguments: dict[str, Any],
+    timeout: int,
+) -> dict[str, Any]:
+    client = Client(host=host)
+    run = client.create_run_from_pipeline_package(
+        pipeline_file=str(package),
+        arguments=arguments,
+        run_name=run_name,
+        enable_caching=False,
+    )
+    observed = client.wait_for_run_completion(
+        run_id=run.run_id,
+        timeout=timeout,
+        sleep_duration=10,
+    )
+    state = str(observed.state).upper()
+    result = {
+        "schema_version": "1.0.0",
+        "run_id": run.run_id,
+        "run_name": run_name,
+        "state": state,
+    }
+    if "SUCCEEDED" not in state:
+        raise RuntimeError(f"Kubeflow run {run.run_id} ended in state {observed.state}")
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compile the H200 code-review A/B/C TrainJob pipeline")
     parser.add_argument("--workflow-image", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--kfp-host", default="")
+    parser.add_argument("--run-name", default="")
+    parser.add_argument("--arguments", type=Path)
+    parser.add_argument("--run-output", type=Path)
+    parser.add_argument("--timeout", type=int, default=45000)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     compiler.Compiler().compile(make_pipeline(args.workflow_image), str(args.output))
+    submit_values = (args.kfp_host, args.run_name, args.arguments, args.run_output)
+    if any(submit_values) and not all(submit_values):
+        parser.error(
+            "--kfp-host, --run-name, --arguments, and --run-output are required together"
+        )
+    if args.kfp_host:
+        arguments = load_run_arguments(args.arguments)
+        result = submit_run(
+            args.kfp_host,
+            args.output,
+            args.run_name,
+            arguments,
+            args.timeout,
+        )
+        args.run_output.parent.mkdir(parents=True, exist_ok=True)
+        args.run_output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
 
 
 if __name__ == "__main__":
