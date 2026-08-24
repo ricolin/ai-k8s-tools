@@ -12,9 +12,9 @@ The profile set is intentionally split by lifecycle boundary:
 | `ai-foundation` | cert-manager and shared Kubeflow namespaces |
 | `ai-platform-core` | cert-manager-dependent issuer, Kubeflow Pipelines, and Model Registry |
 | `ai-scheduling-kueue` | Kueue admission controller |
-| `ai-training-h200` | Kubeflow Trainer v2 and Torch runtime |
+| `ai-training-h200` | JobSet and Kubeflow Trainer v2 controllers |
 | `ai-serving-h200` | KServe control plane |
-| `ai-workflow-bootstrap` | H200 queue, workflow RBAC, and platform defaults |
+| `ai-workflow-bootstrap` | Torch runtime, H200 queue, workflow RBAC, and platform defaults |
 
 `build.sh` reconstructs generated resources from `source-lock.env` and
 `image-lock.tsv`. It requires `git`, `curl`, `helm`, Python 3 with PyYAML, and
@@ -47,6 +47,12 @@ repository `GITHUB_TOKEN` with package-write permission and publishes to
 The charts install controllers and cluster-birth defaults only. Datasets,
 training configurations, model releases, inference requests, and run evidence
 remain workload resources.
+
+The webhook-validated `ClusterTrainingRuntime/torch-distributed` is owned by
+`ai-workflow-bootstrap`, whose add-on profile depends on a Ready
+`ai-training-h200` release. Do not move it back into the Trainer controller
+release: creating the runtime while cert-manager is still rotating the Trainer
+webhook certificate can fail with an unknown-authority error.
 
 The generated controller workloads tolerate both current and legacy
 control-plane taints. This permits an explicitly selected all-in-one AI control

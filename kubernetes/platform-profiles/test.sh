@@ -164,10 +164,19 @@ for chart in (
 PY
 helm template ai-scheduling-kueue "${root}/kubernetes/addons/ai-scheduling-kueue" \
   | grep -F 'trainer.kubeflow.org/trainjob' >/dev/null
-helm template ai-training-h200 "${root}/kubernetes/addons/ai-training-h200" \
-  | grep -F 'kind: ClusterTrainingRuntime' >/dev/null
-helm template ai-workflow-bootstrap "${root}/kubernetes/addons/ai-workflow-bootstrap" \
-  | grep -F 'name: h200-ai' >/dev/null
+training_output=$(mktemp /tmp/ai-training-h200.runtime.XXXXXX)
+helm template ai-training-h200 \
+  "${root}/kubernetes/addons/ai-training-h200" >"${training_output}"
+if grep -Fq 'kind: ClusterTrainingRuntime' "${training_output}"; then
+  echo 'training controller chart must not create webhook-validated runtimes' >&2
+  exit 1
+fi
+workflow_output=$(mktemp /tmp/ai-workflow-bootstrap.runtime.XXXXXX)
+helm template ai-workflow-bootstrap \
+  "${root}/kubernetes/addons/ai-workflow-bootstrap" >"${workflow_output}"
+grep -F 'kind: ClusterTrainingRuntime' "${workflow_output}" >/dev/null
+grep -F 'name: torch-distributed' "${workflow_output}" >/dev/null
+grep -F 'name: h200-ai' "${workflow_output}" >/dev/null
 
 profile_verifier=${root}/kubernetes/platform-profiles/verify.sh
 bash -n "${profile_verifier}"

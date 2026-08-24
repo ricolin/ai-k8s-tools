@@ -876,37 +876,6 @@ spec:
         operator: Exists
       serviceAccountName: ai-training-kubeflow-trainer-controller-manager
 ---
-# Source: kubeflow-trainer/templates/runtimes/torch-distributed.yaml
-apiVersion: trainer.kubeflow.org/v1alpha1
-kind: ClusterTrainingRuntime
-metadata:
-  name: torch-distributed
-  labels:
-    trainer.kubeflow.org/framework: torch
-    helm.sh/chart: kubeflow-trainer-2.2.0
-    app.kubernetes.io/name: kubeflow-trainer
-    app.kubernetes.io/instance: ai-training
-    app.kubernetes.io/version: "2.2.0"
-    app.kubernetes.io/managed-by: Helm
-spec:
-  mlPolicy:
-    numNodes: 1
-    torch: {}
-  template:
-    spec:
-      replicatedJobs:
-        - name: node
-          template:
-            metadata:
-              labels:
-                trainer.kubeflow.org/trainjob-ancestor-step: trainer
-            spec:
-              template:
-                spec:
-                  containers:
-                    - name: node
-                      image: pytorch/pytorch:2.10.0-cuda12.8-cudnn9-runtime@sha256:b85566342b86d13a67712e9315d40cdc2dad7f8d86df1aff3831f80835edbcca
----
 # Source: kubeflow-trainer/charts/jobset/templates/webhook/mutating_webhook_configuration.yaml
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration

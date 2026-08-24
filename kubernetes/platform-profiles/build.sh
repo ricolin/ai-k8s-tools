@@ -73,7 +73,7 @@ helm template ai-scheduling "${work}/kueue.tgz" \
 
 helm template ai-training "${work}/trainer.tgz" \
   --namespace kubeflow-system --include-crds \
-  --set runtimes.torchDistributed.enabled=true \
+  --set runtimes.torchDistributed.enabled=false \
   --set-json 'manager.tolerations=[{"key":"node-role.kubernetes.io/control-plane","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]' \
   --set-json 'jobset.controller.tolerations=[{"key":"node-role.kubernetes.io/control-plane","operator":"Exists","effect":"NoSchedule"},{"key":"node-role.kubernetes.io/master","operator":"Exists","effect":"NoSchedule"}]' \
   >"${work}/ai-training-h200.raw.yaml"
