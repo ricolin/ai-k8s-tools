@@ -765,6 +765,13 @@ spec:
         secret:
           secretName: jobset-webhook-server-cert
           defaultMode: 420
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/control-plane
+        operator: Exists
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+        operator: Exists
       securityContext:
         runAsNonRoot: true
         seccompProfile:

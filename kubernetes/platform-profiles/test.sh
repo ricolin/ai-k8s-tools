@@ -129,7 +129,13 @@ def pod_spec(document):
     return None
 
 
-for chart in ("ai-foundation", "ai-platform-core", "ai-serving-h200"):
+for chart in (
+    "ai-foundation",
+    "ai-platform-core",
+    "ai-scheduling-kueue",
+    "ai-training-h200",
+    "ai-serving-h200",
+):
     manifests = root / "kubernetes" / "addons" / chart / "files"
     workloads = 0
     for path in sorted(manifests.glob("resources-*.yaml")):
