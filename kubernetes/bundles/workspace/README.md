@@ -17,3 +17,22 @@ helm upgrade --install ai-model-workspace \
 kubectl -n ai-workflows wait --for=condition=Complete \
   job/ai-model-workspace-validation --timeout=5m
 ```
+
+The release also records the chart version, storage mode, retention policy,
+and PVC name in `<release>-identity`. Use that ConfigMap together with the OCI
+manifest digest when collecting profile evidence.
+
+## Publish
+
+The `AI platform bundles` workflow validates the workspace and pinned platform
+contracts on every manual run. Set its `publish` input to `true` only for a
+reviewed source commit. It publishes:
+
+```text
+oci://ghcr.io/ricolin/ai-k8s-charts/ai-model-workspace:<chart-version>
+```
+
+After publication, resolve and record the registry-returned manifest digest.
+CAAPH selects the immutable chart version, while deployment preflight must
+verify that the version still resolves to the reviewed digest before a cluster
+template selects the profile.

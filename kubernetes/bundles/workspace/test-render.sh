@@ -9,9 +9,12 @@ helm template inactive "${chart_dir}" >"${temporary}/inactive.yaml"
 ! grep -q '^kind:' "${temporary}/inactive.yaml"
 helm template static "${chart_dir}" -f "${chart_dir}/profiles/static-local.example.yaml" \
   >"${temporary}/static.yaml"
-for kind in Namespace StorageClass PersistentVolume PersistentVolumeClaim ResourceQuota Job; do
+for kind in Namespace StorageClass PersistentVolume PersistentVolumeClaim ResourceQuota Job ConfigMap; do
   grep -Fq "kind: ${kind}" "${temporary}/static.yaml"
 done
+grep -Fq 'chart: "ai-model-workspace-0.1.0"' "${temporary}/static.yaml"
+grep -Fq 'storageMode: "static-local"' "${temporary}/static.yaml"
+grep -Fq 'retentionPolicy: "Keep"' "${temporary}/static.yaml"
 grep -Fq 'helm.sh/resource-policy: keep' "${temporary}/static.yaml"
 grep -Fq 'persistentVolumeReclaimPolicy: Retain' "${temporary}/static.yaml"
 grep -Fq 'automountServiceAccountToken: false' "${temporary}/static.yaml"

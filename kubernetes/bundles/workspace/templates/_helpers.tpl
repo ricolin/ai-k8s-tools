@@ -5,6 +5,10 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
+{{- define "ai-model-workspace.fullname" -}}
+{{- printf "%s" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "ai-model-workspace.validate" -}}
 {{- if .Values.enabled -}}
   {{- if not (has .Values.storage.mode (list "dynamic" "static-local")) -}}
