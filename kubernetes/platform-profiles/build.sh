@@ -48,6 +48,11 @@ render_kustomize "${work}/ai-platform-core.raw.yaml" \
   applications/pipeline/upstream/cluster-scoped-resources \
   applications/pipeline/upstream/env/platform-agnostic \
   applications/hub/upstream/overlays/db
+"${profile_root}/drop-object.py" \
+  --input "${work}/ai-platform-core.raw.yaml" \
+  --output "${work}/ai-platform-core.filtered.yaml" \
+  --kind Namespace --name kubeflow
+mv "${work}/ai-platform-core.filtered.yaml" "${work}/ai-platform-core.raw.yaml"
 
 helm template ai-scheduling "${work}/kueue.tgz" \
   --namespace kueue-system --include-crds \

@@ -51,6 +51,21 @@ done
 helm template ai-platform-core "${root}/kubernetes/addons/ai-platform-core" \
   | grep -A4 -F '/etc/envoy/envoy-config.yaml' \
   | grep -Fq -- '--concurrency'
+core_output=$(mktemp /tmp/ai-platform-core.namespace.XXXXXX)
+helm template ai-platform-core "${root}/kubernetes/addons/ai-platform-core" \
+  >"${core_output}"
+python3 - "${core_output}" <<'PY'
+import sys
+import yaml
+
+for document in yaml.safe_load_all(open(sys.argv[1])):
+    if (
+        isinstance(document, dict)
+        and document.get("kind") == "Namespace"
+        and document.get("metadata", {}).get("name") == "kubeflow"
+    ):
+        raise SystemExit("ai-platform-core must not own Namespace/kubeflow")
+PY
 helm template ai-scheduling-kueue "${root}/kubernetes/addons/ai-scheduling-kueue" \
   | grep -Fq 'trainer.kubeflow.org/trainjob'
 helm template ai-training-h200 "${root}/kubernetes/addons/ai-training-h200" \

@@ -45,10 +45,18 @@ jobs:
         run: |
           set -euo pipefail
           output=$(mktemp -d /tmp/ai-platform-charts.XXXXXX)
+          mkdir -p "${output}/existing"
           for chart in ai-foundation ai-platform-core ai-scheduling-kueue \
             ai-training-h200 ai-serving-h200 ai-workflow-bootstrap; do
             package=$(helm package "kubernetes/addons/${chart}" \
               --destination "${output}" | awk '{print $NF}')
+            version=$(helm show chart "${package}" | \
+              awk '$1 == "version:" {print $2}')
+            if helm pull "oci://ghcr.io/ricolin/ai-k8s-charts/${chart}" \
+              --version "${version}" --destination "${output}/existing" \
+              >/dev/null 2>&1; then
+              echo "Already published: ${chart}:${version}"
+              continue
+            fi
             helm push "${package}" oci://ghcr.io/ricolin/ai-k8s-charts
           done
-
