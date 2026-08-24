@@ -12,7 +12,7 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: local-path-provisioner
+  name: local-path-provisioner-service-account
   namespace: {{ .Values.namespace }}
   labels:
     {{- include "local-path-storage.labels" . | nindent 4 }}
@@ -56,7 +56,7 @@ roleRef:
   name: local-path-provisioner
 subjects:
   - kind: ServiceAccount
-    name: local-path-provisioner
+    name: local-path-provisioner-service-account
     namespace: {{ .Values.namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -132,7 +132,7 @@ spec:
         app.kubernetes.io/name: local-path-storage
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
-      serviceAccountName: local-path-provisioner
+      serviceAccountName: local-path-provisioner-service-account
       {{- with .Values.provisioner.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

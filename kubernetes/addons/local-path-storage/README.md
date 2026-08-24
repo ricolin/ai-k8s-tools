@@ -6,6 +6,11 @@ helper images digest-pinned, creates the StorageClass only when enabled, and
 defaults to `WaitForFirstConsumer` so a PVC is bound on the workload node that
 will consume it.
 
+The provisioner and helper Pods use the upstream
+`local-path-provisioner-service-account` identity. Keep the ServiceAccount,
+RoleBinding subject, and Deployment field synchronized; the provisioner copies
+that identity onto helper Pods during volume creation.
+
 The chart is a storage implementation, not the retained model-workspace
 contract. Compose it before `ai-model-workspace`; the latter creates the
 namespace, quota, retained PVC, and write/read acceptance Job.

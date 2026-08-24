@@ -19,6 +19,10 @@ grep -Fq 'pod-security.kubernetes.io/enforce: privileged' \
 grep -Fq 'docker.io/rancher/local-path-provisioner@sha256:' \
   "${temporary}/active.yaml"
 grep -Fq 'docker.io/library/busybox@sha256:' "${temporary}/active.yaml"
+grep -Fq 'serviceAccountName: local-path-provisioner-service-account' \
+  "${temporary}/active.yaml"
+test "$(grep -Fc 'name: local-path-provisioner-service-account' \
+  "${temporary}/active.yaml")" -eq 2
 grep -Fq 'storageclass.kubernetes.io/is-default-class: "true"' \
   "${temporary}/active.yaml"
 
