@@ -50,7 +50,9 @@ The [NVIDIA-ready cluster lifecycle](../docs/nvidia-ai-ready-cluster.md)
 documents the disabled-by-default GPU Operator/CUDA readiness add-on, retained
 workspace chart, and separately managed Kubeflow/KServe bundle. Existing
 cluster templates do not use these resources unless they explicitly select a
-reviewed add-on profile.
+reviewed plural add-on contract. The workspace chart is ready to wrap, while
+the Kubeflow/KServe bundle still requires immutable CAAPH wrappers before it
+can participate in born-ready cluster completion.
 
 The released-adviser and reports-only agent path is documented in
 [the grounded security-agent guide](../docs/security-agent-workflow.md), with

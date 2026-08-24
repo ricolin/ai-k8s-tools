@@ -7,11 +7,13 @@ clusters:
    blocks add-on readiness until one-GPU and full-node CUDA checks pass.
 2. `kubernetes/bundles/workspace` creates retained model storage and proves a
    bounded write/read path.
-3. `kubernetes/bundles/kubeflow-kserve` installs the pinned Kubeflow Pipelines,
-   Model Registry, Katib, cert-manager, and KServe subset after cluster create.
+3. `kubernetes/bundles/kubeflow-kserve` currently provides the pinned
+   Kubeflow Pipelines, Model Registry, Katib, cert-manager, and KServe
+   imperative bundle. Its composable CAAPH wrappers are a separate publication
+   gate.
 
 The NVIDIA chart renders no objects by default. Cluster templates without an
-`addon_profile` selector keep the normal mCAPI lifecycle. This is the required
+`addon_profiles` selector keep the normal mCAPI lifecycle. This is the required
 compatibility path for Ubuntu 22.04, CPU-only images, and Kubernetes tags that
 have not been accepted with the selected NVIDIA profile.
 
@@ -69,6 +71,9 @@ The CUDA child Jobs inherit `readiness.nodeSelector`,
 those values whenever the accepted GPU nodes are tainted or require a private
 registry credential.
 
-Install the workspace and Kubeflow/KServe bundles only after this lifecycle
-gate passes. Their storage/data deletion paths remain separately controlled so
-cluster add-on deletion cannot silently remove retained model artifacts.
+For the existing imperative path, install the workspace and Kubeflow/KServe
+bundles only after this lifecycle gate passes. For a born-ready cluster,
+publish them as separate immutable CAAPH profiles and select them after the
+NVIDIA profile in the ordered `addon_profiles` contract. Their storage/data
+deletion paths remain separately controlled so cluster add-on deletion cannot
+silently remove retained model artifacts.

@@ -3,8 +3,15 @@
 This versioned workload bundle installs the repository's pinned Kubeflow
 Pipelines, Model Registry, Katib, cert-manager, and KServe subset after an
 mCAPI cluster is infrastructure-ready. It is deliberately independent of the
-NVIDIA `addon_profile`: application lifecycle does not block Magnum cluster
-creation or deletion.
+NVIDIA profile. In the existing imperative path, application lifecycle does
+not block Magnum cluster creation or deletion.
+
+This directory is not yet a CAAPH profile. A born-ready mCAPI product must
+package the owned components into immutable Helm-compatible wrappers, publish
+separate lifecycle profiles with explicit dependencies, and select those
+profiles through the template-owned plural `addon_profiles` contract. Until
+that publication gate passes, this installer remains the accepted fallback
+path and must not be described as profile-managed cluster readiness.
 
 ```bash
 export KUBECONFIG=/path/to/workload/config
