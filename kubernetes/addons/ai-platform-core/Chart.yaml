@@ -1,0 +1,7 @@
+apiVersion: v2
+name: ai-platform-core
+description: Pinned Kubeflow Pipelines and Model Registry platform core
+type: application
+version: 0.1.0
+appVersion: "26.03.1"
+

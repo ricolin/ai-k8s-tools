@@ -1,0 +1,3711 @@
+---
+# Source: kueue/templates/rbac/service_account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-controller-manager'
+  namespace: 'kueue-system'
+---
+# Source: kueue/templates/manager/manager-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-scheduling-kueue-manager-config
+  namespace: 'kueue-system'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+data:
+  controller_manager_config.yaml: |
+    apiVersion: config.kueue.x-k8s.io/v1beta2
+    clientConnection:
+      burst: 500
+      qps: 300
+    controller:
+      groupKindConcurrency:
+        ClusterQueue.kueue.x-k8s.io: 5
+        Job.batch: 5
+        LocalQueue.kueue.x-k8s.io: 5
+        Pod: 5
+        ResourceFlavor.kueue.x-k8s.io: 1
+        Workload.kueue.x-k8s.io: 10
+    health:
+      healthProbeBindAddress: :8081
+    integrations:
+      frameworks:
+      - batch/job
+      - kubeflow.org/mpijob
+      - ray.io/rayjob
+      - ray.io/rayservice
+      - ray.io/raycluster
+      - jobset.x-k8s.io/jobset
+      - workload.codeflare.dev/appwrapper
+      - trainer.kubeflow.org/trainjob
+      - pod
+      - deployment
+      - statefulset
+      - leaderworkerset.x-k8s.io/leaderworkerset
+    internalCertManagement:
+      enable: false
+    kind: Configuration
+    leaderElection:
+      leaderElect: true
+      resourceName: c1f6bfd2.kueue.x-k8s.io
+    metrics:
+      bindAddress: :8443
+    webhook:
+      port: 9443
+---
+# Source: kueue/templates/rbac/batch_admin_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-batch-admin-role'
+aggregationRule:
+  clusterRoleSelectors:
+    - matchLabels:
+        rbac.kueue.x-k8s.io/batch-admin: "true"
+---
+# Source: kueue/templates/rbac/batch_user_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-batch-user-role'
+aggregationRule:
+  clusterRoleSelectors:
+    - matchLabels:
+        rbac.kueue.x-k8s.io/batch-user: "true"
+---
+# Source: kueue/templates/rbac/clusterqueue_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-clusterqueue-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "clusterqueue-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - clusterqueues
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - clusterqueues/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/clusterqueue_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-clusterqueue-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "clusterqueue-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - clusterqueues
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - clusterqueues/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/cohort_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-cohort-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "cohort-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - cohorts
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+# Source: kueue/templates/rbac/cohort_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-cohort-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "cohort-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - cohorts
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: kueue/templates/rbac/jaxjob_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-jaxjob-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "jaxjob-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - jaxjobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - jaxjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/jaxjob_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-jaxjob-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "jaxjob-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - jaxjobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - jaxjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/job_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-job-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "job-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - batch
+    resources:
+      - jobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/job_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-job-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "job-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - batch
+    resources:
+      - jobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/jobset_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-jobset-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "jobset-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - jobset.x-k8s.io
+    resources:
+      - jobsets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - jobset.x-k8s.io
+    resources:
+      - jobsets/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/jobset_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-jobset-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "jobset-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - jobset.x-k8s.io
+    resources:
+      - jobsets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - jobset.x-k8s.io
+    resources:
+      - jobsets/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/leaderworkerset_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-leaderworkerset-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "leaderworkerset-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - leaderworkerset.x-k8s.io
+    resources:
+      - leaderworkersets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - leaderworkerset.x-k8s.io
+    resources:
+      - leaderworkersets/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/leaderworkerset_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-leaderworkerset-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "leaderworkerset-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - leaderworkerset.x-k8s.io
+    resources:
+      - leaderworkersets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - leaderworkerset.x-k8s.io
+    resources:
+      - leaderworkersets/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/localqueue_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-localqueue-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "localqueue-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - localqueues
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - localqueues/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/localqueue_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-localqueue-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "localqueue-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - localqueues
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - localqueues/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/metrics_auth_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-metrics-auth-role'
+rules:
+  - apiGroups:
+      - authentication.k8s.io
+    resources:
+      - tokenreviews
+    verbs:
+      - create
+  - apiGroups:
+      - authorization.k8s.io
+    resources:
+      - subjectaccessreviews
+    verbs:
+      - create
+---
+# Source: kueue/templates/rbac/metrics_reader_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-metrics-reader'
+rules:
+  - nonResourceURLs:
+      - "/metrics"
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/mpijob_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-mpijob-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "mpijob-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - mpijobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - mpijobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/mpijob_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-mpijob-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "mpijob-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - mpijobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - mpijobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/paddlejob_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-paddlejob-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "paddlejob-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - paddlejobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - paddlejobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/paddlejob_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-paddlejob-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "paddlejob-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - paddlejobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - paddlejobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/pending_workloads_cq_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-pending-workloads-cq-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "pending-workloads-cq-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - visibility.kueue.x-k8s.io
+    resources:
+      - clusterqueues/pendingworkloads
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: kueue/templates/rbac/pending_workloads_lq_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-pending-workloads-lq-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "pending-workloads-lq-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - visibility.kueue.x-k8s.io
+    resources:
+      - localqueues/pendingworkloads
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: kueue/templates/rbac/pytorchjob_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-pytorchjob-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "pytorchjob-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - pytorchjobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - pytorchjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/pytorchjob_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-pytorchjob-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "pytorchjob-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - pytorchjobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - pytorchjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/raycluster_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-raycluster-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "raycluster-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayclusters
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayclusters/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/raycluster_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-raycluster-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "raycluster-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayclusters
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayclusters/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/rayjob_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-rayjob-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "rayjob-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayjobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/rayjob_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-rayjob-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "rayjob-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayjobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/rayservice_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-rayservice-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "rayservice-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayservices
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayservices/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/rayservice_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-rayservice-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "rayservice-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayservices
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayservices/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/resourceflavor_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-resourceflavor-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "resourceflavor-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - resourceflavors
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+# Source: kueue/templates/rbac/resourceflavor_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-resourceflavor-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "resourceflavor-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - resourceflavors
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: kueue/templates/rbac/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-manager-role'
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - limitranges
+      - namespaces
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/finalizers
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - pods/status
+    verbs:
+      - get
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - podtemplates
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - update
+      - watch
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resourceNames:
+      - 'ai-scheduling-kueue-mutating-webhook-configuration'
+    resources:
+      - mutatingwebhookconfigurations
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resources:
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resourceNames:
+      - 'ai-scheduling-kueue-validating-webhook-configuration'
+    resources:
+      - validatingwebhookconfigurations
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - apiextensions.k8s.io
+    resourceNames:
+      - clusterprofiles.multicluster.x-k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+  - apiGroups:
+      - apiextensions.k8s.io
+    resourceNames:
+      - clusterqueues.kueue.x-k8s.io
+      - cohorts.kueue.x-k8s.io
+      - localqueues.kueue.x-k8s.io
+      - multikueueclusters.kueue.x-k8s.io
+      - workloads.kueue.x-k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - autoscaling.x-k8s.io
+    resources:
+      - provisioningrequests
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - autoscaling.x-k8s.io
+    resources:
+      - provisioningrequests/status
+    verbs:
+      - get
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - batch
+    resources:
+      - jobs/finalizers
+      - jobs/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - flowcontrol.apiserver.k8s.io
+    resources:
+      - flowschemas
+      - prioritylevelconfigurations
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - flowcontrol.apiserver.k8s.io
+    resources:
+      - flowschemas/status
+    verbs:
+      - patch
+  - apiGroups:
+      - jobset.x-k8s.io
+    resources:
+      - jobsets
+    verbs:
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - jobset.x-k8s.io
+    resources:
+      - jobsets/finalizers
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - jobset.x-k8s.io
+    resources:
+      - jobsets/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - jaxjobs
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - jaxjobs/finalizers
+      - mpijobs/finalizers
+      - paddlejobs/finalizers
+      - pytorchjobs/finalizers
+      - tfjobs/finalizers
+      - xgboostjobs/finalizers
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - jaxjobs/status
+      - mpijobs/status
+      - paddlejobs/status
+      - pytorchjobs/status
+      - tfjobs/status
+      - xgboostjobs/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - mpijobs
+      - paddlejobs
+      - pytorchjobs
+      - tfjobs
+      - xgboostjobs
+    verbs:
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - admissionchecks
+      - clusterqueues
+      - resourceflavors
+      - topologies
+    verbs:
+      - get
+      - list
+      - update
+      - watch
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - admissionchecks/finalizers
+      - clusterqueues/finalizers
+      - resourceflavors/finalizers
+      - topologies/finalizers
+      - workloads/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - admissionchecks/status
+      - clusterqueues/status
+      - cohorts/status
+      - localqueues/status
+      - multikueueclusters/status
+      - workloads/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - cohorts
+      - localqueues
+      - multikueueclusters
+      - multikueueconfigs
+      - provisioningrequestconfigs
+      - workloadpriorityclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - workloads
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - leaderworkerset.x-k8s.io
+    resources:
+      - leaderworkersets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - leaderworkerset.x-k8s.io
+    resources:
+      - leaderworkersets/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - node.k8s.io
+    resources:
+      - runtimeclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayclusters
+      - rayjobs
+      - rayservices
+    verbs:
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayclusters/finalizers
+      - rayjobs/finalizers
+      - rayservices/finalizers
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ray.io
+    resources:
+      - rayclusters/status
+      - rayjobs/status
+      - rayservices/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - resource.k8s.io
+    resources:
+      - deviceclasses
+      - resourceclaims
+      - resourceclaimtemplates
+      - resourceslices
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - scheduling.k8s.io
+    resources:
+      - priorityclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - sparkoperator.k8s.io
+    resources:
+      - sparkapplications
+    verbs:
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - trainer.kubeflow.org
+    resources:
+      - clustertrainingruntimes
+      - trainingruntimes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - trainer.kubeflow.org
+    resources:
+      - trainjobs
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - trainer.kubeflow.org
+    resources:
+      - trainjobs/finalizers
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - trainer.kubeflow.org
+    resources:
+      - trainjobs/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - workload.codeflare.dev
+    resources:
+      - appwrappers
+    verbs:
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - workload.codeflare.dev
+    resources:
+      - appwrappers/finalizers
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - workload.codeflare.dev
+    resources:
+      - appwrappers/status
+    verbs:
+      - get
+      - patch
+      - update
+---
+# Source: kueue/templates/rbac/sparkapplication_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-sparkapplication-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "sparkapplication-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - sparkoperator.k8s.io
+    resources:
+      - sparkapplications
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - sparkoperator.k8s.io
+    resources:
+      - sparkapplications/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/sparkapplication_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-sparkapplication-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "sparkapplication-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - sparkoperator.k8s.io
+    resources:
+      - sparkapplications
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - sparkoperator.k8s.io
+    resources:
+      - sparkapplications/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/tfjob_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-tfjob-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "tfjob-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - tfjobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - tfjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/tfjob_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-tfjob-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "tfjob-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - tfjobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - tfjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/topology_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-topology-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "topology-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - topologies
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+# Source: kueue/templates/rbac/topology_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-topology-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "topology-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - topologies
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: kueue/templates/rbac/trainjob_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-trainjob-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "trainjob-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - trainer.kubeflow.org
+    resources:
+      - trainjobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - trainer.kubeflow.org
+    resources:
+      - trainjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/trainjob_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-trainjob-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "trainjob-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - trainer.kubeflow.org
+    resources:
+      - trainjobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - trainer.kubeflow.org
+    resources:
+      - trainjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/workload_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-workload-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "workload-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - workloads
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - workloads/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/workload_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-workload-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "workload-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - workloads
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - kueue.x-k8s.io
+    resources:
+      - workloads/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/xgboostjob_editor_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-xgboostjob-editor-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "xgboostjob-editor"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - xgboostjobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - xgboostjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/xgboostjob_viewer_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: 'ai-scheduling-kueue-xgboostjob-viewer-role'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    rbac.kueue.x-k8s.io/role: "xgboostjob-viewer"
+    rbac.kueue.x-k8s.io/batch-admin: "true"
+    rbac.kueue.x-k8s.io/batch-user: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - xgboostjobs
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - kubeflow.org
+    resources:
+      - xgboostjobs/status
+    verbs:
+      - get
+---
+# Source: kueue/templates/rbac/metrics_auth_role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-metrics-auth-rolebinding'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: 'ai-scheduling-kueue-metrics-auth-role'
+subjects:
+  - kind: ServiceAccount
+    name: 'ai-scheduling-kueue-controller-manager'
+    namespace: 'kueue-system'
+---
+# Source: kueue/templates/rbac/role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-manager-rolebinding'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: 'ai-scheduling-kueue-manager-role'
+subjects:
+  - kind: ServiceAccount
+    name: 'ai-scheduling-kueue-controller-manager'
+    namespace: 'kueue-system'
+---
+# Source: kueue/templates/rbac/leader_election_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-leader-election-role'
+  namespace: 'kueue-system'
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+---
+# Source: kueue/templates/rbac/manager_clusterprofiles_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-manager-clusterprofiles-role'
+  namespace: 'kueue-system'
+rules:
+  - apiGroups:
+      - multicluster.x-k8s.io
+    resources:
+      - clusterprofiles
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: kueue/templates/rbac/manager_secrets_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-manager-secrets-role'
+  namespace: 'kueue-system'
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - update
+      - watch
+---
+# Source: kueue/templates/rbac/leader_election_role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-leader-election-rolebinding'
+  namespace: 'kueue-system'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: 'ai-scheduling-kueue-leader-election-role'
+subjects:
+  - kind: ServiceAccount
+    name: 'ai-scheduling-kueue-controller-manager'
+    namespace: 'kueue-system'
+---
+# Source: kueue/templates/rbac/manager_clusterprofiles_role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-manager-clusterprofiles-rolebinding'
+  namespace: 'kueue-system'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: 'ai-scheduling-kueue-manager-clusterprofiles-role'
+subjects:
+  - kind: ServiceAccount
+    name: 'ai-scheduling-kueue-controller-manager'
+    namespace: 'kueue-system'
+---
+# Source: kueue/templates/rbac/manager_secrets_role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-manager-secrets-rolebinding'
+  namespace: 'kueue-system'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: 'ai-scheduling-kueue-manager-secrets-role'
+subjects:
+  - kind: ServiceAccount
+    name: 'ai-scheduling-kueue-controller-manager'
+    namespace: 'kueue-system'
+---
+# Source: kueue/templates/visibility/role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: visibility-service
+  name: 'ai-scheduling-kueue-visibility-server-auth-reader'
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+  - kind: ServiceAccount
+    name: 'ai-scheduling-kueue-controller-manager'
+    namespace: 'kueue-system'
+---
+# Source: kueue/templates/manager/auth_proxy_service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-scheduling-kueue-controller-manager-metrics-service
+  namespace: 'kueue-system'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics-service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+---
+# Source: kueue/templates/visibility/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: visibility-service
+  name: 'ai-scheduling-kueue-visibility-server'
+  namespace: 'kueue-system'
+spec:
+  selector:
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+  ports:
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: 8082
+---
+# Source: kueue/templates/webhook/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: webhook-service
+  name: 'ai-scheduling-kueue-webhook-service'
+  namespace: 'kueue-system'
+spec:
+  type: 'ClusterIP'
+  selector:
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+---
+# Source: kueue/templates/manager/manager.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-scheduling-kueue-controller-manager
+  namespace: 'kueue-system'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kueue
+      app.kubernetes.io/instance: ai-scheduling
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kueue
+        app.kubernetes.io/instance: ai-scheduling
+        control-plane: controller-manager
+      annotations:
+        charts.kueue.x-k8s.io/config-checksum: 131a0f1236f99a39076465658e27ca0afd9d6d88a8af5cec7c94dc64fb5c584a
+        kubectl.kubernetes.io/default-container: manager
+    spec:
+      containers:
+      - args:
+        - --config=/controller_manager_config.yaml
+        - --zap-log-level=2        
+        command:
+        - /manager
+        image: "registry.k8s.io/kueue/kueue:v0.19.2@sha256:8a77be2df3d441d1a99b60eb1625c835b5f4feda5db02ece26818cf2a30c4d86"
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 1
+          failureThreshold: 3
+          successThreshold: 1
+        name: manager
+        ports:
+        - containerPort: 8082
+          name: visibility
+          protocol: TCP
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        - containerPort: 8443
+          name: metrics
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+          successThreshold: 1
+        resources:
+          limits:
+            cpu: "2"
+            memory: 512Mi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+        - mountPath: /visibility
+          name: visibility
+        - mountPath: /controller_manager_config.yaml
+          name: manager-config
+          subPath: controller_manager_config.yaml
+        - mountPath: /etc/kueue/metrics/certs
+          name: metrics-certs
+          readOnly: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: ai-scheduling-kueue-controller-manager
+      terminationGracePeriodSeconds: 10
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: ai-scheduling-kueue-webhook-server-cert
+      - name: manager-config
+        configMap:
+          name: ai-scheduling-kueue-manager-config
+      - name: metrics-certs
+        secret:
+          secretName: ai-scheduling-kueue-metrics-server-cert
+          optional: false
+          items:
+          - key: ca.crt
+            path: ca.crt
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+      - name: visibility
+        secret:
+          secretName: ai-scheduling-kueue-visibility-server-cert
+          optional: false
+          items:
+          - key: ca.crt
+            path: ca.crt
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+---
+# Source: kueue/templates/visibility/apiservice_v1beta1.yaml
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: 'kueue-system/ai-scheduling-kueue-visibility-server-cert'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: visibility-service
+  name: v1beta1.visibility.kueue.x-k8s.io
+spec:
+  group: visibility.kueue.x-k8s.io
+  groupPriorityMinimum: 100
+  service:
+    name: 'ai-scheduling-kueue-visibility-server'
+    namespace: 'kueue-system'
+  version: v1beta1
+  versionPriority: 100
+---
+# Source: kueue/templates/visibility/apiservice_v1beta2.yaml
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: 'kueue-system/ai-scheduling-kueue-visibility-server-cert'
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: visibility-service
+  name: v1beta2.visibility.kueue.x-k8s.io
+spec:
+  group: visibility.kueue.x-k8s.io
+  groupPriorityMinimum: 100
+  service:
+    name: 'ai-scheduling-kueue-visibility-server'
+    namespace: 'kueue-system'
+  version: v1beta2
+  versionPriority: 100
+---
+# Source: kueue/templates/certmanager/certificate-metrics.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-metrics-cert'
+  namespace: 'kueue-system'
+spec:
+  dnsNames:
+  - 'ai-scheduling-kueue-controller-manager-metrics-service.kueue-system.svc'
+  - 'ai-scheduling-kueue-controller-manager-metrics-service.kueue-system.svc.cluster.local'
+  commonName: 'ai-scheduling-kueue-metrics'
+  issuerRef:
+    kind: Issuer
+    name: 'ai-scheduling-kueue-selfsigned-issuer'
+  secretName: 'ai-scheduling-kueue-metrics-server-cert'
+---
+# Source: kueue/templates/certmanager/certificate-visibility-server.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-visibility-server-cert'
+  namespace: 'kueue-system'
+spec:
+  dnsNames:
+  - 'ai-scheduling-kueue-visibility-server.kueue-system.svc'
+  - 'ai-scheduling-kueue-visibility-server.kueue-system.svc.cluster.local'
+  commonName: 'ai-scheduling-kueue-visibility-server'
+  issuerRef:
+    kind: Issuer
+    name: 'ai-scheduling-kueue-selfsigned-issuer'
+  secretName: 'ai-scheduling-kueue-visibility-server-cert'
+---
+# Source: kueue/templates/certmanager/certificate.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-serving-cert'
+  namespace: 'kueue-system'
+spec:
+  dnsNames:
+  - 'ai-scheduling-kueue-webhook-service.kueue-system.svc'
+  - 'ai-scheduling-kueue-webhook-service.kueue-system.svc.cluster.local'
+  issuerRef:
+    kind: Issuer
+    name: 'ai-scheduling-kueue-selfsigned-issuer'
+  secretName: 'ai-scheduling-kueue-webhook-server-cert'
+---
+# Source: kueue/templates/certmanager/issuer.yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-selfsigned-issuer'
+  namespace: 'kueue-system'
+spec:
+  selfSigned: {}
+---
+# Source: kueue/templates/webhook/manifests.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-mutating-webhook-configuration'
+  annotations:
+    cert-manager.io/inject-ca-from: kueue-system/ai-scheduling-kueue-serving-cert
+  namespace: 'kueue-system'
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-workload-codeflare-dev-v1beta2-appwrapper
+    failurePolicy: Fail
+    name: mappwrapper.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - workload.codeflare.dev
+        apiVersions:
+          - v1beta2
+        operations:
+          - CREATE
+        resources:
+          - appwrappers
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-kueue-x-k8s-io-v1beta2-clusterqueue
+    failurePolicy: Fail
+    name: mclusterqueue.kb.io
+    rules:
+      - apiGroups:
+          - kueue.x-k8s.io
+        apiVersions:
+          - v1beta2
+        operations:
+          - CREATE
+        resources:
+          - clusterqueues
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-apps-v1-deployment
+    name: mdeployment.kb.io
+    failurePolicy: Fail
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - apps
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - deployments
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-kubeflow-org-v1-jaxjob
+    failurePolicy: Fail
+    name: mjaxjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - jaxjobs
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-batch-v1-job
+    failurePolicy: Fail
+    name: mjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - batch
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - jobs
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-jobset-x-k8s-io-v1alpha2-jobset
+    failurePolicy: Fail
+    name: mjobset.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - jobset.x-k8s.io
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+        resources:
+          - jobsets
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-leaderworkerset-x-k8s-io-v1-leaderworkerset
+    failurePolicy: Fail
+    name: mleaderworkerset.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - leaderworkerset.x-k8s.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - leaderworkersets
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-kubeflow-org-v2beta1-mpijob
+    failurePolicy: Fail
+    name: mmpijob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v2beta1
+        operations:
+          - CREATE
+        resources:
+          - mpijobs
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-kubeflow-org-v1-paddlejob
+    failurePolicy: Fail
+    name: mpaddlejob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - paddlejobs
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate--v1-pod
+    name: mpod.kb.io
+    failurePolicy: Fail
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - pods
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-kubeflow-org-v1-pytorchjob
+    failurePolicy: Fail
+    name: mpytorchjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - pytorchjobs
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-ray-io-v1-raycluster
+    failurePolicy: Fail
+    name: mraycluster.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - ray.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - rayclusters
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-ray-io-v1-rayjob
+    failurePolicy: Fail
+    name: mrayjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - ray.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - rayjobs
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-ray-io-v1-rayservice
+    failurePolicy: Fail
+    name: mrayservice.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - ray.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - rayservices
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-kueue-x-k8s-io-v1beta2-resourceflavor
+    failurePolicy: Fail
+    name: mresourceflavor.kb.io
+    rules:
+      - apiGroups:
+          - kueue.x-k8s.io
+        apiVersions:
+          - v1beta2
+        operations:
+          - CREATE
+        resources:
+          - resourceflavors
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-sparkoperator-k8s-io-v1beta2-sparkapplication
+    failurePolicy: Fail
+    name: msparkapplication.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - sparkoperator.k8s.io
+        apiVersions:
+          - v1beta2
+        operations:
+          - CREATE
+        resources:
+          - sparkapplications
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-apps-v1-statefulset
+    name: mstatefulset.kb.io
+    failurePolicy: Fail
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - apps
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - statefulsets
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-kubeflow-org-v1-tfjob
+    failurePolicy: Fail
+    name: mtfjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - tfjobs
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-trainer-kubeflow-org-v1alpha1-trainjob
+    failurePolicy: Fail
+    name: mtrainjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - trainer.kubeflow.org
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+        resources:
+          - trainjobs
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-kueue-x-k8s-io-v1beta2-workload
+    failurePolicy: Fail
+    name: mworkload.kb.io
+    rules:
+      - apiGroups:
+          - kueue.x-k8s.io
+        apiVersions:
+          - v1beta2
+        operations:
+          - CREATE
+        resources:
+          - workloads
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /mutate-kubeflow-org-v1-xgboostjob
+    failurePolicy: Fail
+    name: mxgboostjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - xgboostjobs
+    sideEffects: None
+    reinvocationPolicy: 'Never'
+---
+# Source: kueue/templates/webhook/manifests.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  labels:
+    helm.sh/chart: kueue-0.19.2
+    app.kubernetes.io/name: kueue
+    app.kubernetes.io/instance: ai-scheduling
+    control-plane: controller-manager
+    app.kubernetes.io/version: "v0.19.2"
+    app.kubernetes.io/managed-by: Helm
+  name: 'ai-scheduling-kueue-validating-webhook-configuration'
+  annotations:
+    cert-manager.io/inject-ca-from: kueue-system/ai-scheduling-kueue-serving-cert
+  namespace: 'kueue-system'
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-workload-codeflare-dev-v1beta2-appwrapper
+    failurePolicy: Fail
+    name: vappwrapper.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - workload.codeflare.dev
+        apiVersions:
+          - v1beta2
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - appwrappers
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-kueue-x-k8s-io-v1beta2-clusterqueue
+    failurePolicy: Fail
+    name: vclusterqueue.kb.io
+    rules:
+      - apiGroups:
+          - kueue.x-k8s.io
+        apiVersions:
+          - v1beta2
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - clusterqueues
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-kueue-x-k8s-io-v1beta2-cohort
+    failurePolicy: Fail
+    name: vcohort.kb.io
+    rules:
+      - apiGroups:
+          - kueue.x-k8s.io
+        apiVersions:
+          - v1beta2
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - cohorts
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-apps-v1-deployment
+    name: vdeployment.kb.io
+    failurePolicy: Fail
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - apps
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - deployments
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-kubeflow-org-v1-jaxjob
+    failurePolicy: Fail
+    name: vjaxjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - jaxjobs
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-batch-v1-job
+    failurePolicy: Fail
+    name: vjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - batch
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - jobs
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-jobset-x-k8s-io-v1alpha2-jobset
+    failurePolicy: Fail
+    name: vjobset.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - jobset.x-k8s.io
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - jobsets
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-leaderworkerset-x-k8s-io-v1-leaderworkerset
+    failurePolicy: Fail
+    name: vleaderworkerset.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - leaderworkerset.x-k8s.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - leaderworkersets
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-kubeflow-org-v2beta1-mpijob
+    failurePolicy: Fail
+    name: vmpijob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v2beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - mpijobs
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-kubeflow-org-v1-paddlejob
+    failurePolicy: Fail
+    name: vpaddlejob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - paddlejobs
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate--v1-pod
+    name: vpod.kb.io
+    failurePolicy: Fail
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-kubeflow-org-v1-pytorchjob
+    failurePolicy: Fail
+    name: vpytorchjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pytorchjobs
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-ray-io-v1-raycluster
+    failurePolicy: Fail
+    name: vraycluster.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - ray.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - rayclusters
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-ray-io-v1-rayjob
+    failurePolicy: Fail
+    name: vrayjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - ray.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - rayjobs
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-ray-io-v1-rayservice
+    failurePolicy: Fail
+    name: vrayservice.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - ray.io
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - rayservices
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-kueue-x-k8s-io-v1beta2-resourceflavor
+    failurePolicy: Fail
+    name: vresourceflavor.kb.io
+    rules:
+      - apiGroups:
+          - kueue.x-k8s.io
+        apiVersions:
+          - v1beta2
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - resourceflavors
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-sparkoperator-k8s-io-v1beta2-sparkapplication
+    failurePolicy: Fail
+    name: vsparkapplication.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - sparkoperator.k8s.io
+        apiVersions:
+          - v1beta2
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - sparkapplications
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-apps-v1-statefulset
+    name: vstatefulset.kb.io
+    failurePolicy: Fail
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - apps
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - statefulsets
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-kubeflow-org-v1-tfjob
+    failurePolicy: Fail
+    name: vtfjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - tfjobs
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-trainer-kubeflow-org-v1alpha1-trainjob
+    failurePolicy: Fail
+    name: vtrainjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - trainer.kubeflow.org
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - trainjobs
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-kueue-x-k8s-io-v1beta2-workload
+    failurePolicy: Fail
+    name: vworkload.kb.io
+    rules:
+      - apiGroups:
+          - kueue.x-k8s.io
+        apiVersions:
+          - v1beta2
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - workloads
+          - workloads/status
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: 'ai-scheduling-kueue-webhook-service'
+        namespace: 'kueue-system'
+        path: /validate-kubeflow-org-v1-xgboostjob
+    failurePolicy: Fail
+    name: vxgboostjob.kb.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - 'kueue-system'
+    rules:
+      - apiGroups:
+          - kubeflow.org
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - xgboostjobs
+    sideEffects: None

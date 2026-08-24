@@ -1,0 +1,4 @@
+{{- if .Values.enabled }}
+{{ .Files.Get "files/resources.yaml" }}
+{{- end }}
+

@@ -1,0 +1,94 @@
+{{- if .Values.enabled }}
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: {{ .Values.queue.flavor }}
+spec:
+  nodeLabels:
+    {{- toYaml .Values.queue.nodeSelector | nindent 4 }}
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: {{ .Values.queue.clusterQueue }}
+spec:
+  namespaceSelector: {}
+  cohort: ""
+  preemption:
+    reclaimWithinCohort: Never
+    withinClusterQueue: Never
+  resourceGroups:
+    - coveredResources:
+        - nvidia.com/gpu
+      flavors:
+        - name: {{ .Values.queue.flavor }}
+          resources:
+            - name: nvidia.com/gpu
+              nominalQuota: {{ .Values.queue.gpuQuota }}
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: {{ .Values.queue.localQueue }}
+  namespace: {{ .Values.namespace }}
+spec:
+  clusterQueue: {{ .Values.queue.clusterQueue }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-workflow-runner
+  namespace: {{ .Values.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ai-workflow-runner
+  namespace: {{ .Values.namespace }}
+rules:
+  - apiGroups: ["trainer.kubeflow.org"]
+    resources: ["trainjobs", "trainjobs/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "jobs/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["kueue.x-k8s.io"]
+    resources: ["localqueues", "workloads"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["serving.kserve.io"]
+    resources: ["inferenceservices", "inferenceservices/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps", "pods", "pods/log", "services"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ai-workflow-runner
+  namespace: {{ .Values.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ai-workflow-runner
+subjects:
+  - kind: ServiceAccount
+    name: ai-workflow-runner
+    namespace: {{ .Values.namespace }}
+  - kind: ServiceAccount
+    name: pipeline-runner
+    namespace: kubeflow
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-workflow-platform-contract
+  namespace: {{ .Values.namespace }}
+data:
+  queue: {{ .Values.queue.localQueue | quote }}
+  clusterQueue: {{ .Values.queue.clusterQueue | quote }}
+  flavor: {{ .Values.queue.flavor | quote }}
+  gpuQuota: {{ .Values.queue.gpuQuota | quote }}
+  trainerRuntime: "torch-distributed"
+{{- end }}
+

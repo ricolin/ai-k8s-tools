@@ -1,0 +1,7 @@
+apiVersion: v2
+name: ai-scheduling-kueue
+description: Pinned Kueue admission controller for AI training workloads
+type: application
+version: 0.1.0
+appVersion: "0.19.2"
+

@@ -1,0 +1,7 @@
+apiVersion: v2
+name: ai-workflow-bootstrap
+description: Queue, RBAC, and workflow defaults for one eight-H200 cluster
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+

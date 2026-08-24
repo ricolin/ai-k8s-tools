@@ -1,0 +1,7 @@
+apiVersion: v2
+name: ai-foundation
+description: Pinned cert-manager and shared namespace foundation for AI clusters
+type: application
+version: 0.1.0
+appVersion: "26.03.1"
+

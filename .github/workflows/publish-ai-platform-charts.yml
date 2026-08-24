@@ -1,0 +1,54 @@
+name: Publish AI platform profile charts
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - kubernetes/addons/ai-foundation/**
+      - kubernetes/addons/ai-platform-core/**
+      - kubernetes/addons/ai-scheduling-kueue/**
+      - kubernetes/addons/ai-training-h200/**
+      - kubernetes/addons/ai-serving-h200/**
+      - kubernetes/addons/ai-workflow-bootstrap/**
+      - kubernetes/platform-profiles/**
+      - .github/workflows/publish-ai-platform-charts.yml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test-and-publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+        with:
+          version: v3.18.6
+
+      - name: Install validation dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-yaml
+
+      - name: Test profile contracts
+        run: ./kubernetes/platform-profiles/test.sh
+
+      - name: Log in to GHCR
+        run: |
+          printf '%s' "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io \
+            --username "${{ github.actor }}" --password-stdin
+
+      - name: Publish immutable profile charts
+        run: |
+          set -euo pipefail
+          output=$(mktemp -d /tmp/ai-platform-charts.XXXXXX)
+          for chart in ai-foundation ai-platform-core ai-scheduling-kueue \
+            ai-training-h200 ai-serving-h200 ai-workflow-bootstrap; do
+            package=$(helm package "kubernetes/addons/${chart}" \
+              --destination "${output}" | awk '{print $NF}')
+            helm push "${package}" oci://ghcr.io/ricolin/ai-k8s-charts
+          done
+

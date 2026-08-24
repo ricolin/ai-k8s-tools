@@ -1,0 +1,1121 @@
+# Source: kubeflow-trainer/charts/jobset/templates/controller/service_account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jobset-controller
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: jobset-0.11.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.11.0"
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+---
+# Source: kubeflow-trainer/templates/rbac/service_account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-training-kubeflow-trainer-controller-manager
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: manager
+---
+# Source: kubeflow-trainer/charts/jobset/templates/webhook/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jobset-webhook-server-cert
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: jobset-0.11.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.11.0"
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: webhook
+data:
+  ca.crt: ""
+  ca.key: ""
+  tls.crt: ""
+  tls.key: ""
+---
+# Source: kubeflow-trainer/templates/webhook/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kubeflow-trainer-webhook-cert
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: webhook
+data:
+  ca.crt: ""
+  ca.key: ""
+  tls.crt: ""
+  tls.key: ""
+---
+# Source: kubeflow-trainer/charts/jobset/templates/controller/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobset-controller-config
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: jobset-0.11.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.11.0"
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: controller
+data:
+  controller_manager_config.yaml: |2
+
+    apiVersion: config.jobset.x-k8s.io/v1alpha1
+    kind: Configuration
+    leaderElection:
+      leaderElect: true
+    clientConnection:
+      qps: 500
+      burst: 500
+    internalCertManagement:
+      enable: true
+      webhookServiceName: jobset-webhook-service
+      webhookSecretName: jobset-webhook-server-cert
+---
+# Source: kubeflow-trainer/templates/manager/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-training-kubeflow-trainer-config
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: manager
+data:
+  controller_manager_config.yaml: |
+    apiVersion: config.trainer.kubeflow.org/v1alpha1
+    kind: Configuration
+    # Health configuration
+    health:
+      healthProbeBindAddress: :8081
+      readinessEndpointName: readyz
+      livenessEndpointName: healthz
+
+    # Metrics configuration
+    metrics:
+      bindAddress: :8443
+      secureServing: true
+
+    # Webhook configuration
+    webhook:
+      port: 9443
+      host: ""
+
+    # Leader election configuration
+    leaderElection:
+      leaderElect: true
+      resourceName: trainer.kubeflow.org
+      resourceNamespace: ""
+      leaseDuration: 15s
+      renewDeadline: 10s
+      retryPeriod: 2s
+
+    # Controller configuration
+    controller:
+      groupKindConcurrency:
+        TrainJob.trainer.kubeflow.org: 5
+        TrainingRuntime.trainer.kubeflow.org: 1
+        ClusterTrainingRuntime.trainer.kubeflow.org: 1
+
+    # Certificate management configuration
+    certManagement:
+      enable: true
+      webhookServiceName: ai-training-kubeflow-trainer-controller-manager
+      webhookSecretName: kubeflow-trainer-webhook-cert
+
+    statusServer:
+      port: 10443
+      qps: 5
+      burst: 10
+---
+# Source: kubeflow-trainer/templates/manager/public-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeflow-trainer-public
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: manager
+data:
+  kubeflow_trainer_version: "v2.2.0"
+---
+# Source: kubeflow-trainer/charts/jobset/templates/controller/cluster_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jobset-controller
+  labels:
+    helm.sh/chart: jobset-0.11.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.11.0"
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: controller
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - batch
+  resources:
+  - jobs/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - jobset.x-k8s.io
+  resources:
+  - jobsets
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - jobset.x-k8s.io
+  resources:
+  - jobsets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - jobset.x-k8s.io
+  resources:
+  - jobsets/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - jobset.x-k8s.io
+  resources:
+  - configurations
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - jobset.x-k8s.io
+  resources:
+  - configurations/status
+  verbs:
+  - get
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+# Source: kubeflow-trainer/templates/rbac/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ai-training-kubeflow-trainer-controller-manager
+  labels:
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: manager
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - limitranges
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - update
+- apiGroups:
+  - jobset.x-k8s.io
+  resources:
+  - jobsets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - node.k8s.io
+  resources:
+  - runtimeclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - scheduling.volcano.sh
+  - scheduling.x-k8s.io
+  resources:
+  - podgroups
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - trainer.kubeflow.org
+  resources:
+  - clustertrainingruntimes
+  - trainingruntimes
+  - trainjobs
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - trainer.kubeflow.org
+  resources:
+  - clustertrainingruntimes/finalizers
+  - trainingruntimes/finalizers
+  - trainjobs/finalizers
+  - trainjobs/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+# Source: kubeflow-trainer/charts/jobset/templates/controller/cluster_role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jobset-controller
+  labels:
+    helm.sh/chart: jobset-0.11.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.11.0"
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jobset-controller
+subjects:
+- kind: ServiceAccount
+  name: jobset-controller
+  namespace: kubeflow-system
+---
+# Source: kubeflow-trainer/templates/rbac/clusterrole_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-training-kubeflow-trainer-controller-manager
+  labels:
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ai-training-kubeflow-trainer-controller-manager
+subjects:
+- kind: ServiceAccount
+  name: ai-training-kubeflow-trainer-controller-manager
+  namespace: kubeflow-system
+---
+# Source: kubeflow-trainer/charts/jobset/templates/controller/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jobset-controller
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: jobset-0.11.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.11.0"
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: controller
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - delete
+---
+# Source: kubeflow-trainer/templates/rbac/public_configmap_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubeflow-trainer-public
+  labels:
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: manager
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  resourceNames:
+  - kubeflow-trainer-public
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Source: kubeflow-trainer/charts/jobset/templates/controller/role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jobset-controller
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: jobset-0.11.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.11.0"
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jobset-controller
+subjects:
+- kind: ServiceAccount
+  name: jobset-controller
+  namespace: kubeflow-system
+---
+# Source: kubeflow-trainer/templates/rbac/public_configmap_role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubeflow-trainer-public
+  labels:
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubeflow-trainer-public
+subjects:
+- kind: Group
+  apiGroup: rbac.authorization.k8s.io
+  name: system:authenticated
+---
+# Source: kubeflow-trainer/charts/jobset/templates/prometheus/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: jobset-metrics-service
+  namespace: kubeflow-system
+  labels:
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: controller
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: controller
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+---
+# Source: kubeflow-trainer/charts/jobset/templates/webhook/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: jobset-webhook-service
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: jobset-0.11.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.11.0"
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: webhook
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+  ports:
+  - name: webhook
+    protocol: TCP
+    port: 443
+    targetPort: webhook
+---
+# Source: kubeflow-trainer/templates/manager/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-training-kubeflow-trainer-controller-manager
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: manager
+spec:
+  selector:
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: manager
+  ports:
+  - name: monitoring-port
+    port: 8443
+    targetPort: metrics
+  - name: webhook-server
+    port: 443
+    protocol: TCP
+    targetPort: webhook
+  - name: status-server
+    port: 10443
+    targetPort: status-server
+    protocol: TCP
+---
+# Source: kubeflow-trainer/charts/jobset/templates/controller/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobset-controller
+  namespace: kubeflow-system
+  labels:
+    helm.sh/chart: jobset-0.11.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.11.0"
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jobset
+      app.kubernetes.io/instance: ai-training
+      app.kubernetes.io/component: controller
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: jobset-0.11.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/version: "0.11.0"
+        app.kubernetes.io/name: jobset
+        app.kubernetes.io/instance: ai-training
+        app.kubernetes.io/component: controller
+      annotations:
+        jobset.x-k8s.io/config-hash: 5bae3fa534a4ae594b0d769c081230501389a6ace28909d8928eb166b8f068aa
+    spec:
+      containers:
+      - name: controller
+        image: "registry.k8s.io/jobset/jobset:v0.11.0@sha256:f21cab7d33574502684095b53114fc1b6cb3d83a2d84cd124712899670eab6da"
+        imagePullPolicy: IfNotPresent
+        command:
+        - /manager
+        args:
+        - --zap-log-level=2
+        - --config=/controller_manager_config.yaml
+        volumeMounts:
+        - name: manager-config
+          subPath: controller_manager_config.yaml
+          mountPath: /controller_manager_config.yaml
+        - name: webhook-cert
+          mountPath: /tmp/k8s-webhook-server/serving-certs
+          readOnly: true
+        ports:
+        - name: health-probe
+          containerPort: 8081
+          protocol: TCP
+        - name: webhook
+          containerPort: 9443
+          protocol: TCP
+        - name: metrics
+          containerPort: 8443
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            port: 8081
+            scheme: HTTP
+            path: /healthz
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            port: 8081
+            scheme: HTTP
+            path: /readyz
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 2
+            memory: 4Gi
+          requests:
+            cpu: 500m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      volumes:
+      - name: manager-config
+        configMap:
+          name: jobset-controller-config
+      - name: webhook-cert
+        secret:
+          secretName: jobset-webhook-server-cert
+          defaultMode: 420
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: jobset-controller
+---
+# Source: kubeflow-trainer/templates/manager/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-training-kubeflow-trainer-controller-manager
+  namespace: kubeflow-system
+  labels:
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubeflow-trainer
+      app.kubernetes.io/instance: ai-training
+      app.kubernetes.io/part-of: kubeflow
+      app.kubernetes.io/component: manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubeflow-trainer
+        app.kubernetes.io/instance: ai-training
+        app.kubernetes.io/part-of: kubeflow
+        app.kubernetes.io/component: manager
+    spec:
+      containers:
+      - name: manager
+        image: ghcr.io/kubeflow/trainer/trainer-controller-manager:v2.2.0@sha256:a4239d836209727b362655b01a3062ca19b5c9e9b0c344d08632c6c7e43cd844
+        imagePullPolicy: IfNotPresent
+        command:
+        - /manager
+        args:
+        - --config=/controller_manager_config.yaml
+
+        ports:
+        - name: health
+          containerPort: 8081
+          protocol: TCP
+        - name: metrics
+          containerPort: 8443
+          protocol: TCP
+        - name: webhook
+          containerPort: 9443
+          protocol: TCP
+        - name: status-server
+          containerPort: 10443
+          protocol: TCP
+        volumeMounts:
+        - name: webhook-cert
+          mountPath: /tmp/k8s-webhook-server/serving-certs
+          readOnly: true
+        - name: manager-config
+          mountPath: /controller_manager_config.yaml
+          subPath: controller_manager_config.yaml
+          readOnly: true
+
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 3
+
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          timeoutSeconds: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+      volumes:
+      - name: webhook-cert
+        secret:
+          secretName: kubeflow-trainer-webhook-cert
+          defaultMode: 420
+      - name: manager-config
+        configMap:
+          name: ai-training-kubeflow-trainer-config
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/control-plane
+        operator: Exists
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+        operator: Exists
+      serviceAccountName: ai-training-kubeflow-trainer-controller-manager
+---
+# Source: kubeflow-trainer/templates/runtimes/torch-distributed.yaml
+apiVersion: trainer.kubeflow.org/v1alpha1
+kind: ClusterTrainingRuntime
+metadata:
+  name: torch-distributed
+  labels:
+    trainer.kubeflow.org/framework: torch
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  mlPolicy:
+    numNodes: 1
+    torch: {}
+  template:
+    spec:
+      replicatedJobs:
+        - name: node
+          template:
+            metadata:
+              labels:
+                trainer.kubeflow.org/trainjob-ancestor-step: trainer
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: node
+                      image: pytorch/pytorch:2.10.0-cuda12.8-cudnn9-runtime@sha256:b85566342b86d13a67712e9315d40cdc2dad7f8d86df1aff3831f80835edbcca
+---
+# Source: kubeflow-trainer/charts/jobset/templates/webhook/mutating_webhook_configuration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: jobset-mutating-webhook-configuration
+  labels:
+    helm.sh/chart: jobset-0.11.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.11.0"
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: webhook
+webhooks:
+- name: mutate-jobset-x-k8s-io-v1alpha2-jobset.x-k8s.io
+  admissionReviewVersions:
+  - v1
+  rules:
+  - apiGroups:
+    - jobset.x-k8s.io
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    resources:
+    - jobsets
+  clientConfig:
+    service:
+      name: jobset-webhook-service
+      namespace: kubeflow-system
+      path: /mutate-jobset-x-k8s-io-v1alpha2-jobset
+  sideEffects: None
+- name: mutate--v1-pod.x-k8s.io
+  admissionReviewVersions:
+  - v1
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+  clientConfig:
+    service:
+      name: jobset-webhook-service
+      namespace: kubeflow-system
+      path: /mutate--v1-pod
+  objectSelector:
+    matchExpressions:
+    - key: jobset.sigs.k8s.io/jobset-name
+      operator: Exists
+  sideEffects: None
+---
+# Source: kubeflow-trainer/templates/webhook/mutating_webhook_configuration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: defaulter.trainer.kubeflow.org
+  labels:
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: webhook
+webhooks:
+- name: defaulter.trainjob.trainer.kubeflow.org
+  admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: ai-training-kubeflow-trainer-controller-manager
+      namespace: kubeflow-system
+      path: /mutate-trainer-kubeflow-org-v1alpha1-trainjob
+  sideEffects: None
+  failurePolicy: Fail
+  rules:
+  - apiGroups:
+    - trainer.kubeflow.org
+    apiVersions:
+    - v1alpha1
+    resources:
+    - trainjobs
+    operations:
+    - CREATE
+    - UPDATE
+---
+# Source: kubeflow-trainer/charts/jobset/templates/webhook/validating_webhook_configuration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: jobset-validating-webhook-configuration
+  labels:
+    helm.sh/chart: jobset-0.11.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/version: "0.11.0"
+    app.kubernetes.io/name: jobset
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/component: webhook
+webhooks:
+- name: validate-jobset-x-k8s-io-v1alpha2-jobset.x-k8s.io
+  admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: jobset-webhook-service
+      namespace: kubeflow-system
+      path: /validate-jobset-x-k8s-io-v1alpha2-jobset
+  rules:
+  - apiGroups:
+    - jobset.x-k8s.io
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - jobsets
+  sideEffects: None
+- name: validate--v1-pod.x-k8s.io
+  admissionReviewVersions:
+  - v1
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+  clientConfig:
+    service:
+      name: jobset-webhook-service
+      namespace: kubeflow-system
+      path: /validate--v1-pod
+  objectSelector:
+    matchExpressions:
+    - key: jobset.sigs.k8s.io/jobset-name
+      operator: Exists
+  sideEffects: None
+---
+# Source: kubeflow-trainer/templates/webhook/validating_webhook_configuration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validator.trainer.kubeflow.org
+  labels:
+    helm.sh/chart: kubeflow-trainer-2.2.0
+    app.kubernetes.io/name: kubeflow-trainer
+    app.kubernetes.io/instance: ai-training
+    app.kubernetes.io/version: "2.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kubeflow
+    app.kubernetes.io/component: webhook
+webhooks:
+- name: validator.clustertrainingruntime.trainer.kubeflow.org
+  admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: ai-training-kubeflow-trainer-controller-manager
+      namespace: kubeflow-system
+      path: /validate-trainer-kubeflow-org-v1alpha1-clustertrainingruntime
+  sideEffects: None
+  failurePolicy: Fail
+  rules:
+  - apiGroups:
+    - trainer.kubeflow.org
+    apiVersions:
+    - v1alpha1
+    resources:
+    - clustertrainingruntimes
+    operations:
+    - CREATE
+    - UPDATE
+- name: validator.trainingruntime.trainer.kubeflow.org
+  admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: ai-training-kubeflow-trainer-controller-manager
+      namespace: kubeflow-system
+      path: /validate-trainer-kubeflow-org-v1alpha1-trainingruntime
+  sideEffects: None
+  failurePolicy: Fail
+  rules:
+  - apiGroups:
+    - trainer.kubeflow.org
+    apiVersions:
+    - v1alpha1
+    resources:
+    - trainingruntimes
+    operations:
+    - CREATE
+    - UPDATE
+- name: validator.trainjob.trainer.kubeflow.org
+  admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: ai-training-kubeflow-trainer-controller-manager
+      namespace: kubeflow-system
+      path: /validate-trainer-kubeflow-org-v1alpha1-trainjob
+  sideEffects: None
+  failurePolicy: Fail
+  rules:
+  - apiGroups:
+    - trainer.kubeflow.org
+    apiVersions:
+    - v1alpha1
+    resources:
+    - trainjobs
+    operations:
+    - CREATE
+    - UPDATE

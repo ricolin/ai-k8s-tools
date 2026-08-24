@@ -1,0 +1,10 @@
+enabled: true
+namespace: ai-workflows
+queue:
+  flavor: h200
+  clusterQueue: h200-ai
+  localQueue: ai-workflows
+  gpuQuota: 8
+  nodeSelector:
+    ai-build-tools.ricolin.dev/accelerator: nvidia-h200
+
