@@ -1,0 +1,12 @@
+schemaVersion: 1
+source:
+  repository: https://github.com/ricolin/ai-k8s-tools
+  commit: faf4409aae477d64210337b4405ec156b9e72306
+publication:
+  workflow: https://github.com/ricolin/ai-k8s-tools/actions/runs/32709494453
+  chart:
+    name: ai-model-workspace
+    version: 0.1.0
+    packageSha256: f0f17ecfc91aea9e416370f898b6714b00a5a8a38002fd5570199fe0403b8fb6
+    reference: ghcr.io/ricolin/ai-k8s-charts/ai-model-workspace:0.1.0
+    manifestDigest: sha256:3386845d774ac4bf27c5350d07943344fe455fb835b3651270995ef92703868e

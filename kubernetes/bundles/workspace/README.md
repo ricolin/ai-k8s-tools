@@ -36,3 +36,8 @@ After publication, resolve and record the registry-returned manifest digest.
 CAAPH selects the immutable chart version, while deployment preflight must
 verify that the version still resolves to the reviewed digest before a cluster
 template selects the profile.
+
+The currently promoted source, workflow, chart package checksum, and OCI
+manifest digest are recorded in `artifacts.lock.yaml`. Treat the file as an
+append-by-new-version publication record: never overwrite a published tag with
+different chart bytes.
