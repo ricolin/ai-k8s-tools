@@ -25,6 +25,20 @@ network access. `test.sh` is offline after the generated resources exist.
 ./kubernetes/platform-profiles/test.sh
 ```
 
+After a workload cluster is born from the complete profile set, verify the
+workload-side contract without reinstalling or mutating the platform:
+
+```bash
+export KUBECONFIG=/path/to/workload-kubeconfig
+EXPECTED_GPU_COUNT=8 \
+  ./kubernetes/platform-profiles/verify.sh
+```
+
+The verifier follows the packaged ownership split: KFP and KServe run in
+`kubeflow`, Model Registry runs in `default`, Kueue runs in `kueue-system`,
+and Kubeflow Trainer runs in `kubeflow-system`. Katib is not required because
+it remains an optional future profile.
+
 Publication is performed by
 `.github/workflows/publish-ai-platform-charts.yml`. The workflow uses the
 repository `GITHUB_TOKEN` with package-write permission and publishes to
@@ -33,4 +47,3 @@ repository `GITHUB_TOKEN` with package-write permission and publishes to
 The charts install controllers and cluster-birth defaults only. Datasets,
 training configurations, model releases, inference requests, and run evidence
 remain workload resources.
-

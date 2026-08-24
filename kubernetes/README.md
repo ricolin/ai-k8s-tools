@@ -10,7 +10,6 @@ same immutable-input and release-evidence principles.
 
 ```text
 kubernetes/
-├── addons/                    # Opt-in cluster lifecycle add-ons
 ├── addons/                    # Composable infrastructure and GPU add-ons
 ├── bundles/                   # Versioned workspace and AI platform bundles
 ├── profiles/                  # Environment-specific scheduling and evidence
@@ -48,12 +47,13 @@ plan and reusable H200 validation templates are in
 [kubernetes-CUDA](../kubernetes-CUDA/README.md).
 
 The [NVIDIA-ready cluster lifecycle](../docs/nvidia-ai-ready-cluster.md)
-documents the disabled-by-default GPU Operator/CUDA readiness add-on, retained
-workspace chart, and separately managed Kubeflow/KServe bundle. Existing
-cluster templates do not use these resources unless they explicitly select a
-reviewed plural add-on contract. The workspace chart is ready to wrap, while
-the Kubeflow/KServe bundle still requires immutable CAAPH wrappers before it
-can participate in born-ready cluster completion.
+documents the disabled-by-default GPU Operator/CUDA readiness add-on and the
+retained workspace. Existing cluster templates do not use these resources
+unless they explicitly select a reviewed plural add-on contract. Immutable
+profiles now package the accepted KFP, Kueue, Kubeflow Trainer, KServe,
+storage, workspace, and workflow-bootstrap boundaries; use
+`kubernetes/platform-profiles/verify.sh` for non-mutating workload-side
+acceptance.
 
 The released-adviser and reports-only agent path is documented in
 [the grounded security-agent guide](../docs/security-agent-workflow.md), with

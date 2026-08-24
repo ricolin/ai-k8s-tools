@@ -73,4 +73,15 @@ helm template ai-training-h200 "${root}/kubernetes/addons/ai-training-h200" \
 helm template ai-workflow-bootstrap "${root}/kubernetes/addons/ai-workflow-bootstrap" \
   | grep -F 'name: h200-ai' >/dev/null
 
+profile_verifier=${root}/kubernetes/platform-profiles/verify.sh
+bash -n "${profile_verifier}"
+grep -F 'namespace=${WORKLOAD_NAMESPACE:-ai-workflows}' "${profile_verifier}" >/dev/null
+grep -F 'require_deployment kubeflow' "${profile_verifier}" >/dev/null
+grep -F 'require_deployment kueue-system' "${profile_verifier}" >/dev/null
+grep -F 'require_deployment kubeflow-system' "${profile_verifier}" >/dev/null
+if grep -Fq 'experiments.kubeflow.org' "${profile_verifier}"; then
+  echo 'profile verifier must not require the excluded Katib profile' >&2
+  exit 1
+fi
+
 echo 'PASS: composable AI platform profile contracts'
