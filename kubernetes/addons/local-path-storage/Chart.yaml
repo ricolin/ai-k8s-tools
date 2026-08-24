@@ -1,0 +1,6 @@
+apiVersion: v2
+name: local-path-storage
+description: Opt-in digest-pinned local-path provisioner for AI workflow clusters
+type: application
+version: 0.1.0
+appVersion: "0.0.37"

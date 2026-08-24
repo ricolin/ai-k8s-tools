@@ -1,0 +1,17 @@
+enabled: false
+namespace: local-path-storage
+provisioner:
+  image: docker.io/rancher/local-path-provisioner@sha256:e757967a5ec338f6a9b371c5a9688bedaa8c3578ea3dd4db329ea0084be0a86f
+  imagePullPolicy: IfNotPresent
+  replicas: 1
+  nodeSelector: {}
+  tolerations: []
+storageClass:
+  name: local-path
+  default: true
+  reclaimPolicy: Delete
+  volumeBindingMode: WaitForFirstConsumer
+nodePath: /opt/local-path-provisioner
+helper:
+  image: docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+  imagePullPolicy: IfNotPresent

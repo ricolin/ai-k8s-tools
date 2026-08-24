@@ -11,7 +11,8 @@ same immutable-input and release-evidence principles.
 ```text
 kubernetes/
 ├── addons/                    # Opt-in cluster lifecycle add-ons
-├── bundles/                   # Versioned storage and AI platform bundles
+├── addons/                    # Composable infrastructure and GPU add-ons
+├── bundles/                   # Versioned workspace and AI platform bundles
 ├── profiles/                  # Environment-specific scheduling and evidence
 ├── platform/                  # Kubeflow, Hub, KServe and storage installation
 ├── workflows/                 # KFP DSL, workflow tools and unit tests

@@ -3,6 +3,14 @@ name: AI platform bundles
 on:
   workflow_dispatch:
     inputs:
+      bundle:
+        description: Reviewed Helm chart to package
+        required: true
+        type: choice
+        options:
+          - workspace
+          - local-path-storage
+        default: workspace
       publish:
         description: Publish the reviewed Helm charts to GHCR
         required: true
@@ -34,18 +42,39 @@ jobs:
 
       - name: Validate portable bundle contracts
         run: |
+          ./kubernetes/addons/local-path-storage/test-render.sh
           ./kubernetes/bundles/workspace/test-render.sh
           ./kubernetes/bundles/kubeflow-kserve/test-contract.sh
 
-      - name: Package workspace chart
+      - name: Package selected chart
+        env:
+          BUNDLE: ${{ inputs.bundle }}
         run: |
           set -euo pipefail
           mkdir -p dist
-          version=$(awk '$1 == "version:" { print $2 }' \
-            kubernetes/bundles/workspace/Chart.yaml)
-          helm package kubernetes/bundles/workspace --destination dist
-          test -s "dist/ai-model-workspace-${version}.tgz"
-          sha256sum "dist/ai-model-workspace-${version}.tgz"
+          case "${BUNDLE}" in
+            workspace)
+              chart_dir=kubernetes/bundles/workspace
+              ;;
+            local-path-storage)
+              chart_dir=kubernetes/addons/local-path-storage
+              ;;
+            *)
+              echo "unsupported bundle: ${BUNDLE}" >&2
+              exit 2
+              ;;
+          esac
+          chart_name=$(awk '$1 == "name:" { print $2 }' "${chart_dir}/Chart.yaml")
+          version=$(awk '$1 == "version:" { print $2 }' "${chart_dir}/Chart.yaml")
+          helm package "${chart_dir}" --destination dist
+          package="dist/${chart_name}-${version}.tgz"
+          test -s "${package}"
+          sha256sum "${package}"
+          {
+            printf 'CHART_NAME=%s\n' "${chart_name}"
+            printf 'CHART_VERSION=%s\n' "${version}"
+            printf 'CHART_PACKAGE=%s\n' "${package}"
+          } >>"${GITHUB_ENV}"
 
       - name: Log in to GHCR
         if: inputs.publish
@@ -55,17 +84,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Publish workspace chart
+      - name: Publish selected chart
         if: inputs.publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version=$(awk '$1 == "version:" { print $2 }' \
-            kubernetes/bundles/workspace/Chart.yaml)
           printf '%s' "${GH_TOKEN}" | helm registry login ghcr.io \
             --username "${GITHUB_ACTOR}" --password-stdin
-          helm push "dist/ai-model-workspace-${version}.tgz" \
+          helm push "${CHART_PACKAGE}" \
             oci://ghcr.io/ricolin/ai-k8s-charts
 
       - name: Upload packaged chart
