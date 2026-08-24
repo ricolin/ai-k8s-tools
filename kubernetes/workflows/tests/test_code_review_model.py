@@ -14,6 +14,7 @@ from ai_build_tools_k8s.code_review_model import (
     render_node_local_serving,
     render_serving,
     render_training_job,
+    render_training_trainjob,
     validate_dataset,
     validate_dataset_record,
     validate_release,
@@ -153,6 +154,44 @@ def test_training_and_serving_can_tolerate_control_plane_taints() -> None:
     ]
     assert training["spec"]["template"]["spec"]["tolerations"] == expected
     assert serving["spec"]["predictor"]["tolerations"] == expected
+
+
+def test_trainjob_uses_profile_runtime_kueue_and_workspace() -> None:
+    value = render_training_trainjob(
+        "review-a",
+        "ai-workflows",
+        "reviewer:v1",
+        "workspace",
+        "/workspace/configs/a.json",
+        8,
+        "ai-workflows",
+        "torch-distributed",
+        "accelerator",
+        "h200",
+        "Never",
+        digest("a"),
+        True,
+    )
+    assert value["apiVersion"] == "trainer.kubeflow.org/v1alpha1"
+    assert value["kind"] == "TrainJob"
+    assert value["metadata"]["labels"]["kueue.x-k8s.io/queue-name"] == "ai-workflows"
+    assert value["spec"]["runtimeRef"] == {
+        "apiGroup": "trainer.kubeflow.org",
+        "kind": "ClusterTrainingRuntime",
+        "name": "torch-distributed",
+    }
+    trainer = value["spec"]["trainer"]
+    assert trainer["numNodes"] == 1
+    assert trainer["numProcPerNode"] == 8
+    assert trainer["resourcesPerNode"]["limits"]["nvidia.com/gpu"] == 8
+    pod = value["spec"]["runtimePatches"][0]["trainingRuntimeSpec"]["template"]["spec"]["replicatedJobs"][0]["template"]["spec"]["template"]["spec"]
+    assert pod["nodeSelector"] == {"accelerator": "h200"}
+    assert pod["volumes"][0]["persistentVolumeClaim"]["claimName"] == "workspace"
+    assert pod["containers"][0]["volumeMounts"][0] == {
+        "name": "workspace",
+        "mountPath": "/workspace",
+    }
+    assert pod["tolerations"][0]["key"] == "node-role.kubernetes.io/control-plane"
 
 
 def test_node_local_serving_uses_the_verified_adapter_runtime() -> None:

@@ -26,6 +26,8 @@ ai-image-model = "ai_build_tools_k8s.image_model:main"
 ai-code-review-model = "ai_build_tools_k8s.code_review_model:main"
 ai-code-review-agent = "ai_build_tools_k8s.code_review_agent:main"
 ai-code-review-sandbox = "ai_build_tools_k8s.code_review_sandbox:main"
+ai-code-review-trainjob = "ai_build_tools_k8s.code_review_trainjob:main"
+ai-code-review-pipeline = "ai_build_tools_k8s.code_review_pipeline:main"
 
 [build-system]
 requires = ["hatchling"]
