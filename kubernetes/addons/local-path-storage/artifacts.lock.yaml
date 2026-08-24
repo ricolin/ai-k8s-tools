@@ -1,12 +1,12 @@
 schemaVersion: 1
 source:
   repository: https://github.com/ricolin/ai-k8s-tools
-  commit: 792ca3e6bfc836e7436ff3e76257f00aaada147a
+  commit: 47d51c0df4eb01db0bd2e5c5498ceaefcb7de9b5
 publication:
-  workflow: https://github.com/ricolin/ai-k8s-tools/actions/runs/32713848143
+  workflow: https://github.com/ricolin/ai-k8s-tools/actions/runs/32775264812
   chart:
     name: local-path-storage
-    version: 0.1.1
-    packageSha256: 6d6d7658a04479488f2658b351f5c21ee83bd780a834cf1fc2f4f165a8e0ba0c
-    reference: ghcr.io/ricolin/ai-k8s-charts/local-path-storage:0.1.1
-    manifestDigest: sha256:e4b71e3661bca7333be6d7e92048d4a32e5338af2c5c47a6b88a610def8edd90
+    version: 0.1.2
+    packageSha256: 9f39cf2860ac55a4580250a58d7314803e4cad8a99a26af4538819c681ce0846
+    reference: ghcr.io/ricolin/ai-k8s-charts/local-path-storage:0.1.2
+    manifestDigest: sha256:07cdab9ee4e232c1be5dd90f2e0eb4592a610fe8a27bd9773feb3c8cdacee4fe
