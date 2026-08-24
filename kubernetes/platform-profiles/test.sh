@@ -50,7 +50,7 @@ done
 
 helm template ai-platform-core "${root}/kubernetes/addons/ai-platform-core" \
   | grep -A4 -F '/etc/envoy/envoy-config.yaml' \
-  | grep -Fq -- '--concurrency'
+  | grep -F -- '--concurrency' >/dev/null
 core_output=$(mktemp /tmp/ai-platform-core.namespace.XXXXXX)
 helm template ai-platform-core "${root}/kubernetes/addons/ai-platform-core" \
   >"${core_output}"
@@ -67,10 +67,10 @@ for document in yaml.safe_load_all(open(sys.argv[1])):
         raise SystemExit("ai-platform-core must not own Namespace/kubeflow")
 PY
 helm template ai-scheduling-kueue "${root}/kubernetes/addons/ai-scheduling-kueue" \
-  | grep -Fq 'trainer.kubeflow.org/trainjob'
+  | grep -F 'trainer.kubeflow.org/trainjob' >/dev/null
 helm template ai-training-h200 "${root}/kubernetes/addons/ai-training-h200" \
-  | grep -Fq 'kind: ClusterTrainingRuntime'
+  | grep -F 'kind: ClusterTrainingRuntime' >/dev/null
 helm template ai-workflow-bootstrap "${root}/kubernetes/addons/ai-workflow-bootstrap" \
-  | grep -Fq 'name: h200-ai'
+  | grep -F 'name: h200-ai' >/dev/null
 
 echo 'PASS: composable AI platform profile contracts'
