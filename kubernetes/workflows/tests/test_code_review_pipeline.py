@@ -15,7 +15,8 @@ def test_pipeline_submits_sequential_trainjobs_without_gpu_task_requests(tmp_pat
     assert rendered.count("ai-code-review-trainjob") == 3
     assert "torch-distributed" in rendered
     assert "ai-workflows" in rendered
-    assert "nvidia-h200" in rendered
+    assert "nvidia.com/gpu.product" in rendered
+    assert "NVIDIA-H200" in rendered
     assert 'key: nvidia.com/gpu' not in rendered
 
 

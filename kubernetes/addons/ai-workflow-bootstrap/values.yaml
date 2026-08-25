@@ -10,4 +10,4 @@ queue:
   localQueue: ai-workflows
   gpuQuota: 8
   nodeSelector:
-    ai-build-tools.ricolin.dev/accelerator: nvidia-h200
+    nvidia.com/gpu.product: NVIDIA-H200

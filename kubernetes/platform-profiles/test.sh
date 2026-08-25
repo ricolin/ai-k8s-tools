@@ -177,6 +177,11 @@ helm template ai-workflow-bootstrap \
 grep -F 'kind: ClusterTrainingRuntime' "${workflow_output}" >/dev/null
 grep -F 'name: torch-distributed' "${workflow_output}" >/dev/null
 grep -F 'name: h200-ai' "${workflow_output}" >/dev/null
+grep -F 'nvidia.com/gpu.product: NVIDIA-H200' "${workflow_output}" >/dev/null
+if grep -Fq 'ai-build-tools.ricolin.dev/accelerator' "${workflow_output}"; then
+  echo 'workflow profile must use the GPU Operator product label' >&2
+  exit 1
+fi
 
 profile_verifier=${root}/kubernetes/platform-profiles/verify.sh
 bash -n "${profile_verifier}"

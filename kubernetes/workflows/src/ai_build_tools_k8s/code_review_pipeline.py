@@ -53,9 +53,9 @@ def make_pipeline(workflow_image: str):
                 "--runtime",
                 "torch-distributed",
                 "--node-selector-key",
-                "ai-build-tools.ricolin.dev/accelerator",
+                "nvidia.com/gpu.product",
                 "--node-selector-value",
-                "nvidia-h200",
+                "NVIDIA-H200",
                 "--image-pull-policy",
                 "Never",
                 "--node-local-image-id",
@@ -116,8 +116,8 @@ def make_pipeline(workflow_image: str):
             kubernetes.mount_pvc(task, pvc_name=pvc_name, mount_path="/workspace")
             kubernetes.add_node_selector(
                 task,
-                "ai-build-tools.ricolin.dev/accelerator",
-                "nvidia-h200",
+                "nvidia.com/gpu.product",
+                "NVIDIA-H200",
             )
             kubernetes.add_toleration(
                 task,
