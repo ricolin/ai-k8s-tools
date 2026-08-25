@@ -183,6 +183,15 @@ def test_trainjob_uses_profile_runtime_kueue_and_workspace() -> None:
     trainer = value["spec"]["trainer"]
     assert trainer["numNodes"] == 1
     assert trainer["numProcPerNode"] == 8
+    assert trainer["command"] == ["torchrun"]
+    assert trainer["args"] == [
+        "--standalone",
+        "--nnodes=1",
+        "--nproc-per-node=8",
+        "/opt/ai-code-review/trainer.py",
+        "--config",
+        "/workspace/configs/a.json",
+    ]
     assert trainer["resourcesPerNode"]["limits"]["nvidia.com/gpu"] == 8
     runtime_patch = value["spec"]["runtimePatches"][0]["trainingRuntimeSpec"]
     replicated_job = runtime_patch["template"]["spec"]["replicatedJobs"][0]

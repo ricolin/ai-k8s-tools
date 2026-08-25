@@ -369,8 +369,15 @@ def render_training_trainjob(
                 "numNodes": 1,
                 "numProcPerNode": gpu_count,
                 "image": trainer_image,
-                "command": ["/opt/ai-venv/bin/python", "/opt/ai-code-review/trainer.py"],
-                "args": ["--config", config_path],
+                "command": ["torchrun"],
+                "args": [
+                    "--standalone",
+                    "--nnodes=1",
+                    f"--nproc-per-node={gpu_count}",
+                    "/opt/ai-code-review/trainer.py",
+                    "--config",
+                    config_path,
+                ],
                 "env": [
                     {"name": "HF_HUB_OFFLINE", "value": "1"},
                     {"name": "TRANSFORMERS_OFFLINE", "value": "1"},
