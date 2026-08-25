@@ -288,6 +288,19 @@ if secret_rules != [
     raise SystemExit(
         "workflow runner must read only the KFP artifact credential secret"
     )
+jobset_rules = [
+    rule
+    for rule in role["rules"]
+    if rule.get("apiGroups") == ["jobset.x-k8s.io"]
+]
+if jobset_rules != [
+    {
+        "apiGroups": ["jobset.x-k8s.io"],
+        "resources": ["jobsets"],
+        "verbs": ["get", "list", "watch"],
+    }
+]:
+    raise SystemExit("workflow runner must have read-only JobSet evidence access")
 PY
 if grep -Fq 'ai-build-tools.ricolin.dev/accelerator' "${workflow_output}"; then
   echo 'workflow profile must use the GPU Operator product label' >&2
