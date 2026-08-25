@@ -9,6 +9,7 @@ from ai_build_tools_k8s.code_review_model import ContractError
 from ai_build_tools_k8s.code_review_trainjob import (
     hydrate_parent_digest,
     load_training_result,
+    stage_evidence_dir,
     terminal_state,
 )
 
@@ -21,6 +22,12 @@ def test_trainjob_terminal_state() -> None:
     assert terminal_state(
         {"status": {"conditions": [{"type": "Failed", "status": "True"}]}}
     ) == "FAILED"
+
+
+def test_stage_evidence_dir_joins_only_a_lowercase_stage(tmp_path: Path) -> None:
+    assert stage_evidence_dir(tmp_path, "release-a") == tmp_path / "release-a"
+    with pytest.raises(ContractError, match="lowercase name"):
+        stage_evidence_dir(tmp_path, "../release-a")
 
 
 def test_parent_digest_is_hydrated_from_the_previous_stage(tmp_path: Path) -> None:

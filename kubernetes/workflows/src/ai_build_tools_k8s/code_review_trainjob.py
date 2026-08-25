@@ -100,6 +100,13 @@ def terminal_state(resource: dict[str, Any]) -> str | None:
     return None
 
 
+def stage_evidence_dir(root: Path, stage: str) -> Path:
+    allowed = "abcdefghijklmnopqrstuvwxyz0123456789-"
+    if not stage or any(character not in allowed for character in stage):
+        raise ContractError("evidence stage must be a lowercase name")
+    return root / stage
+
+
 def capture_namespace_resources(namespace: str, evidence_dir: Path) -> None:
     resources = {
         "kueue-workloads": "workloads.kueue.x-k8s.io",
@@ -188,6 +195,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--parent-result", type=Path)
     parser.add_argument("--timeout", type=int, default=14400)
     parser.add_argument("--evidence-dir", required=True)
+    parser.add_argument("--evidence-stage", default="")
     parser.add_argument("--output", required=True)
     return parser
 
@@ -220,10 +228,13 @@ def main() -> None:
             args.node_local_image_id,
             args.tolerate_control_plane,
         )
+        evidence_dir = Path(args.evidence_dir)
+        if args.evidence_stage:
+            evidence_dir = stage_evidence_dir(evidence_dir, args.evidence_stage)
         run_trainjob(
             manifest,
             config,
-            Path(args.evidence_dir),
+            evidence_dir,
             Path(args.output),
             args.timeout,
         )

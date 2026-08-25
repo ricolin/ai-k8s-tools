@@ -20,6 +20,8 @@ def test_pipeline_submits_sequential_trainjobs_without_gpu_task_requests(tmp_pat
     rendered = output.read_text()
     assert rendered.count("ai-code-review-trainjob") == 3
     assert rendered.count("--parent-result") == 2
+    assert rendered.count("--evidence-stage") == 3
+    assert '"Concat"' not in rendered
     assert "torch-distributed" in rendered
     assert "workload_namespace" in rendered
     assert "nvidia.com/gpu.product" in rendered
