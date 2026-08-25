@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+import yaml
 from kfp import compiler
 
 from ai_build_tools_k8s.pipeline import make_deployment_pipeline, make_training_pipeline
@@ -181,6 +182,16 @@ def test_pipeline_defaults_are_provider_neutral(tmp_path: Path) -> None:
         compiler.Compiler().compile(pipeline, str(output))
         rendered = output.read_text()
         assert "defaultValue: kubernetes-fixture" in rendered
+        platform = next(
+            document
+            for document in yaml.safe_load_all(rendered)
+            if isinstance(document, dict) and "platforms" in document
+        )
+        executors = platform["platforms"]["kubernetes"]["deploymentSpec"][
+            "executors"
+        ]
+        for executor in executors.values():
+            assert executor["securityContext"]["runAsNonRoot"] is True
 
 
 def test_local_path_helper_image_is_digest_pinned() -> None:

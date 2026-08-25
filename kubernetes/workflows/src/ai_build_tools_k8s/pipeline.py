@@ -298,6 +298,7 @@ def create_components(workflow_image: str):
 
 
 def add_placement(task: dsl.PipelineTask, key: str, value: str) -> None:
+    kubernetes.set_security_context(task, run_as_non_root=True)
     if key and value:
         kubernetes.add_node_selector(task, key, value)
 

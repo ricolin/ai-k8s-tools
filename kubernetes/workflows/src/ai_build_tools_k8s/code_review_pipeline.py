@@ -174,6 +174,7 @@ def make_pipeline(workflow_image: str):
 
         for task in (stage_a, stage_b, stage_c):
             kubernetes.set_image_pull_policy(task, "Never")
+            kubernetes.set_security_context(task, run_as_non_root=True)
             kubernetes.mount_pvc(task, pvc_name=pvc_name, mount_path="/workspace")
             kubernetes.add_node_selector(
                 task,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 from kfp import compiler
 
 import ai_build_tools_k8s.code_review_pipeline as pipeline_module
@@ -24,6 +25,15 @@ def test_pipeline_submits_sequential_trainjobs_without_gpu_task_requests(tmp_pat
     assert "nvidia.com/gpu.product" in rendered
     assert "NVIDIA-H200" in rendered
     assert 'key: nvidia.com/gpu' not in rendered
+    platform = next(
+        document
+        for document in yaml.safe_load_all(rendered)
+        if isinstance(document, dict) and "platforms" in document
+    )
+    executors = platform["platforms"]["kubernetes"]["deploymentSpec"]["executors"]
+    assert len(executors) == 3
+    for executor in executors.values():
+        assert executor["securityContext"]["runAsNonRoot"] is True
 
 
 def test_pipeline_arguments_require_the_exact_contract(tmp_path: Path) -> None:
