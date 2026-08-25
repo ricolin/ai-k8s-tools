@@ -66,6 +66,58 @@ for document in yaml.safe_load_all(open(sys.argv[1])):
     ):
         raise SystemExit("ai-platform-core must not own Namespace/kubeflow")
 PY
+python3 - "${core_output}" <<'PY'
+import sys
+import yaml
+
+required = {
+    (
+        "node-role.kubernetes.io/control-plane",
+        "Exists",
+        "NoSchedule",
+    ),
+    ("node-role.kubernetes.io/master", "Exists", "NoSchedule"),
+}
+matched = 0
+for document in yaml.safe_load_all(open(sys.argv[1])):
+    if not isinstance(document, dict):
+        continue
+    identity = (
+        document.get("kind"),
+        document.get("metadata", {}).get("namespace"),
+        document.get("metadata", {}).get("name"),
+    )
+    if identity != (
+        "ConfigMap",
+        "kubeflow",
+        "workflow-controller-configmap",
+    ):
+        continue
+    matched += 1
+    defaults = yaml.safe_load(
+        document.get("data", {}).get("workflowDefaults", "")
+    )
+    tolerations = (
+        defaults.get("spec", {})
+        .get("templateDefaults", {})
+        .get("tolerations", [])
+    )
+    actual = {
+        (item.get("key"), item.get("operator"), item.get("effect"))
+        for item in tolerations
+    }
+    missing = required - actual
+    if missing:
+        raise SystemExit(
+            "workflow controller defaults miss control-plane tolerations: "
+            f"{missing}"
+        )
+if matched != 1:
+    raise SystemExit(
+        "expected one kubeflow/workflow-controller-configmap, "
+        f"found {matched}"
+    )
+PY
 foundation_output=$(mktemp /tmp/ai-foundation.issuer.XXXXXX)
 helm template ai-foundation "${root}/kubernetes/addons/ai-foundation" \
   >"${foundation_output}"

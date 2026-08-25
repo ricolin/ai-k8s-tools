@@ -59,6 +59,11 @@ render_kustomize "${work}/ai-platform-core.raw.yaml" \
   --output "${work}/ai-platform-core.filtered.yaml" \
   --kind Namespace --name kubeflow
 mv "${work}/ai-platform-core.filtered.yaml" "${work}/ai-platform-core.raw.yaml"
+"${profile_root}/add-workflow-pod-tolerations.py" \
+  --input "${work}/ai-platform-core.raw.yaml" \
+  --output "${work}/ai-platform-core.tolerations.yaml"
+mv "${work}/ai-platform-core.tolerations.yaml" \
+  "${work}/ai-platform-core.raw.yaml"
 printf '\n---\n' >>"${work}/ai-platform-core.raw.yaml"
 cat "${work}/kubeflow-self-signing-issuer.yaml" \
   >>"${work}/ai-platform-core.raw.yaml"
