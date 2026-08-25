@@ -61,7 +61,7 @@ def main() -> None:
     parser.add_argument("--evidence-class", default="kubernetes-fixture")
     parser.add_argument("--evidence-level", default="mechanics")
     parser.add_argument("--author", default="ai-build-tools")
-    parser.add_argument("--workload-namespace", default="ai-workflows")
+    parser.add_argument("--workload-namespace", default="kubeflow")
     parser.add_argument(
         "--registry-service-host",
         default="model-registry-service.kubeflow.svc.cluster.local",

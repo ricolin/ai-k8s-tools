@@ -1,5 +1,5 @@
 enabled: true
-namespace: ai-workflows
+namespace: kubeflow
 trainerRuntime:
   name: torch-distributed
   image: >-

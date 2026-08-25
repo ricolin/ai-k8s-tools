@@ -20,7 +20,7 @@ def test_pipeline_submits_sequential_trainjobs_without_gpu_task_requests(tmp_pat
     assert rendered.count("ai-code-review-trainjob") == 3
     assert rendered.count("--parent-result") == 2
     assert "torch-distributed" in rendered
-    assert "ai-workflows" in rendered
+    assert "workload_namespace" in rendered
     assert "nvidia.com/gpu.product" in rendered
     assert "NVIDIA-H200" in rendered
     assert 'key: nvidia.com/gpu' not in rendered
@@ -39,7 +39,8 @@ def test_pipeline_arguments_require_the_exact_contract(tmp_path: Path) -> None:
   "config_a_path": "/workspace/a.json",
   "config_b_path": "/workspace/b.json",
   "config_c_path": "/workspace/c.json",
-  "evidence_root": "/workspace/evidence"
+  "evidence_root": "/workspace/evidence",
+  "workload_namespace": "kubeflow"
 }\n"""
     )
     assert load_run_arguments(path)["trainjob_c_name"] == "train-c"
@@ -75,23 +76,39 @@ def test_submission_uses_the_workload_namespace_and_service_account(
         "http://kfp.example",
         package,
         "run-name",
-        {"key": "value"},
-        "ai-workflows",
+        {"key": "value", "workload_namespace": "kubeflow"},
+        "kubeflow",
         "ai-workflow-runner",
         600,
     )
 
     assert observed["client"] == {
         "host": "http://kfp.example",
-        "namespace": "ai-workflows",
+        "namespace": "kubeflow",
     }
     assert observed["create"] == {
         "pipeline_file": str(package),
-        "arguments": {"key": "value"},
+        "arguments": {"key": "value", "workload_namespace": "kubeflow"},
         "run_name": "run-name",
-        "namespace": "ai-workflows",
+        "namespace": "kubeflow",
         "service_account": "ai-workflow-runner",
         "enable_caching": False,
     }
-    assert result["namespace"] == "ai-workflows"
+    assert result["namespace"] == "kubeflow"
     assert result["service_account"] == "ai-workflow-runner"
+
+
+def test_submission_rejects_a_cross_namespace_workspace(tmp_path: Path) -> None:
+    package = tmp_path / "pipeline.yaml"
+    package.write_text("pipeline")
+
+    with pytest.raises(ValueError, match="workload_namespace must equal"):
+        submit_run(
+            "http://kfp.example",
+            package,
+            "run-name",
+            {"workload_namespace": "ai-workflows"},
+            "kubeflow",
+            "ai-workflow-runner",
+            600,
+        )

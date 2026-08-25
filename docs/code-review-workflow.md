@@ -5,6 +5,12 @@ reviewer for Bash, Python, Go, Rust, and YAML. It uses the offline eight-GPU
 LoRA engine with a dedicated dataset, contract, evaluator, release, and serving
 identity.
 
+The packaged single-user KFP control plane creates Workflow Pods in
+`kubeflow`. Keep the KFP run namespace, `workload_namespace`, LocalQueue,
+ServiceAccount, and `ai-model-workspace` PVC in that same namespace. The
+pipeline submission rejects a mismatch before creating a run because a KFP
+task Pod cannot mount a cross-namespace PVC.
+
 ## Release Progression
 
 | Release | Purpose |
@@ -63,13 +69,13 @@ Use a distinct output directory for every attempt.
 ```bash
 kubernetes/tools/ai-workflow code-review render-training-job \
   --name code-reviewer-a-RUN_ID \
-  --namespace ai-workflows \
+  --namespace kubeflow \
   --trainer-image registry.example/ai/code-review-trainer@sha256:REPLACE \
   --pvc ai-model-workspace \
   --config-path /workspace/runs/RUN_ID/code-review/configs/release-a.json \
   --gpu-count 8 \
-  --node-selector-key ai-build-tools.ricolin.dev/accelerator \
-  --node-selector-value nvidia-h200 \
+  --node-selector-key nvidia.com/gpu.product \
+  --node-selector-value NVIDIA-H200 \
   --tolerate-control-plane \
   --output evidence/release-a-job.json
 ```
@@ -104,13 +110,13 @@ schema, agent-plan schema, and policy profile. Render KServe with:
 kubernetes/tools/ai-workflow code-review render-serving \
   --release /workspace/runs/RUN_ID/code-review/release/code-review-release.json \
   --name code-reviewer-c \
-  --namespace ai-workflows \
+  --namespace kubeflow \
   --vllm-image registry.example/vllm@sha256:REPLACE \
   --verifier-image registry.example/ai/workflows@sha256:REPLACE \
   --pvc ai-model-workspace \
   --gpu-count 1 \
-  --node-selector-key ai-build-tools.ricolin.dev/accelerator \
-  --node-selector-value nvidia-h200 \
+  --node-selector-key nvidia.com/gpu.product \
+  --node-selector-value NVIDIA-H200 \
   --tolerate-control-plane \
   --output evidence/code-reviewer-c-inferenceservice.json
 ```

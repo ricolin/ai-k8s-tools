@@ -427,7 +427,7 @@ def make_deployment_pipeline(workflow_image: str, node_selector_key: str, node_s
         base_uri: str,
         adapter_uri: str,
         runtime_image: str,
-        namespace: str = "ai-workflows",
+        namespace: str = "kubeflow",
         service_account: str = "ai-build-tools-serving",
         evidence_class: str = "kubernetes-fixture",
         prompt: str = "a photograph of a cbear cute little brown bear",

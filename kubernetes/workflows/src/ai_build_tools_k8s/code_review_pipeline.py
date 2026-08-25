@@ -17,6 +17,7 @@ RUN_ARGUMENTS = {
     "config_b_path",
     "config_c_path",
     "evidence_root",
+    "workload_namespace",
 }
 
 
@@ -30,6 +31,7 @@ def make_pipeline(workflow_image: str):
         config_path: str,
         evidence_root: str,
         stage: str,
+        workload_namespace: str,
         result: dsl.Output[dsl.Artifact],
     ) -> dsl.ContainerSpec:
         return dsl.ContainerSpec(
@@ -39,7 +41,7 @@ def make_pipeline(workflow_image: str):
                 "--name",
                 name,
                 "--namespace",
-                "ai-workflows",
+                workload_namespace,
                 "--trainer-image",
                 trainer_image,
                 "--pvc",
@@ -80,6 +82,7 @@ def make_pipeline(workflow_image: str):
         parent_result: dsl.Input[dsl.Artifact],
         evidence_root: str,
         stage: str,
+        workload_namespace: str,
         result: dsl.Output[dsl.Artifact],
     ) -> dsl.ContainerSpec:
         return dsl.ContainerSpec(
@@ -89,7 +92,7 @@ def make_pipeline(workflow_image: str):
                 "--name",
                 name,
                 "--namespace",
-                "ai-workflows",
+                workload_namespace,
                 "--trainer-image",
                 trainer_image,
                 "--pvc",
@@ -134,6 +137,7 @@ def make_pipeline(workflow_image: str):
         config_b_path: str,
         config_c_path: str,
         evidence_root: str,
+        workload_namespace: str,
     ) -> None:
         stage_a = root_trainjob_component(
             name=trainjob_a_name,
@@ -143,6 +147,7 @@ def make_pipeline(workflow_image: str):
             config_path=config_a_path,
             evidence_root=evidence_root,
             stage="release-a",
+            workload_namespace=workload_namespace,
         )
         stage_b = child_trainjob_component(
             name=trainjob_b_name,
@@ -153,6 +158,7 @@ def make_pipeline(workflow_image: str):
             parent_result=stage_a.outputs["result"],
             evidence_root=evidence_root,
             stage="release-b",
+            workload_namespace=workload_namespace,
         )
         stage_c = child_trainjob_component(
             name=trainjob_c_name,
@@ -163,6 +169,7 @@ def make_pipeline(workflow_image: str):
             parent_result=stage_b.outputs["result"],
             evidence_root=evidence_root,
             stage="release-c",
+            workload_namespace=workload_namespace,
         )
 
         for task in (stage_a, stage_b, stage_c):
@@ -217,6 +224,12 @@ def submit_run(
     service_account: str,
     timeout: int,
 ) -> dict[str, Any]:
+    workload_namespace = arguments.get("workload_namespace")
+    if workload_namespace != namespace:
+        raise ValueError(
+            "workload_namespace must equal the KFP run namespace because "
+            "pipeline task Pods and their PVC are namespace-scoped"
+        )
     client = Client(host=host, namespace=namespace)
     run = client.create_run_from_pipeline_package(
         pipeline_file=str(package),
@@ -253,7 +266,7 @@ def main() -> None:
     parser.add_argument("--run-name", default="")
     parser.add_argument("--arguments", type=Path)
     parser.add_argument("--run-output", type=Path)
-    parser.add_argument("--namespace", default="ai-workflows")
+    parser.add_argument("--namespace", default="kubeflow")
     parser.add_argument("--service-account", default="ai-workflow-runner")
     parser.add_argument("--timeout", type=int, default=45000)
     args = parser.parse_args()

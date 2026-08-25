@@ -177,6 +177,7 @@ helm template ai-workflow-bootstrap \
 grep -F 'kind: ClusterTrainingRuntime' "${workflow_output}" >/dev/null
 grep -F 'name: torch-distributed' "${workflow_output}" >/dev/null
 grep -F 'name: h200-ai' "${workflow_output}" >/dev/null
+grep -F 'namespace: kubeflow' "${workflow_output}" >/dev/null
 grep -F 'nvidia.com/gpu.product: NVIDIA-H200' "${workflow_output}" >/dev/null
 if [[ $(grep -Fc 'apiVersion: kueue.x-k8s.io/v1beta2' "${workflow_output}") -ne 3 ]]; then
   echo 'workflow profile must use Kueue v1beta2 for all Kueue resources' >&2
@@ -201,7 +202,7 @@ fi
 
 profile_verifier=${root}/kubernetes/platform-profiles/verify.sh
 bash -n "${profile_verifier}"
-grep -F 'namespace=${WORKLOAD_NAMESPACE:-ai-workflows}' "${profile_verifier}" >/dev/null
+grep -F 'namespace=${WORKLOAD_NAMESPACE:-kubeflow}' "${profile_verifier}" >/dev/null
 grep -F 'require_deployment kubeflow' "${profile_verifier}" >/dev/null
 grep -F 'require_deployment kueue-system' "${profile_verifier}" >/dev/null
 grep -F 'require_deployment kubeflow-system' "${profile_verifier}" >/dev/null

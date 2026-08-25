@@ -5,7 +5,7 @@ set -euo pipefail
 
 kubectl_bin=${KUBECTL_BIN:-$(command -v kubectl)}
 jq_bin=${JQ_BIN:-$(command -v jq)}
-workload_namespace=${WORKLOAD_NAMESPACE:-ai-workflows}
+workload_namespace=${WORKLOAD_NAMESPACE:-kubeflow}
 workspace_pvc=${WORKSPACE_PVC:-ai-model-workspace}
 storage_class=${STORAGE_CLASS:-local-path}
 expected_gpu_count=${EXPECTED_GPU_COUNT:-8}

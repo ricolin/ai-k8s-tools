@@ -310,10 +310,10 @@ Verify that:
 ### KServe inference
 
 ```bash
-kubectl -n ai-workflows get inferenceservice,pod,service
+kubectl -n kubeflow get inferenceservice,pod,service
 
 service=cute-bear-b-${run_label}
-kubectl -n ai-workflows port-forward \
+kubectl -n kubeflow port-forward \
   "service/${service}-predictor" 8082:80
 
 curl -fsS -X POST \

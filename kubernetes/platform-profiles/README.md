@@ -39,6 +39,13 @@ The verifier follows the packaged ownership split: KFP and KServe run in
 and Kubeflow Trainer runs in `kubeflow-system`. Katib is not required because
 it remains an optional future profile.
 
+The packaged KFP deployment is single-user, so its API creates Argo Workflows
+and task Pods in `kubeflow`. The workflow bootstrap therefore defaults its
+ServiceAccount and LocalQueue to `kubeflow`, and the selected workspace profile
+must create the workflow PVC there as well. A deployment that overrides this
+namespace must move all three resources together; Kubernetes does not permit a
+Pod to mount a PVC from another namespace.
+
 Publication is performed by
 `.github/workflows/publish-ai-platform-charts.yml`. The workflow uses the
 repository `GITHUB_TOKEN` with package-write permission and publishes to
