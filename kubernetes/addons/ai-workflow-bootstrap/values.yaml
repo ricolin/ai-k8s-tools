@@ -9,5 +9,7 @@ queue:
   clusterQueue: h200-ai
   localQueue: ai-workflows
   gpuQuota: 8
+  cpuQuota: 64
+  memoryQuota: 512Gi
   nodeSelector:
     nvidia.com/gpu.product: NVIDIA-H200
