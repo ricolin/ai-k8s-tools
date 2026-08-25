@@ -30,6 +30,7 @@ nvcr.io/nvidia/tritonserver:23.05-py3	sha256:0190dbdba3012f0c3ed9a7eaf57f0c86124
 public.ecr.aws/docker/library/mysql:8.3	sha256:9de9d54fecee6253130e65154b930978b1fcc336bcc86dfd06e89b72a2588ebe
 pytorch/pytorch:2.10.0-cuda12.8-cudnn9-runtime	sha256:b85566342b86d13a67712e9315d40cdc2dad7f8d86df1aff3831f80835edbcca
 pytorch/torchserve-kfs:0.9.0	sha256:d6cfdac5d83007932aa7bfb29ec42858fbc5cd48b9a6f4a7f68088a5c3bde07e
+quay.io/argoproj/argoexec:v3.7.3	sha256:d299769f4681ba47fa5e4e00f1c4d31eee782659c43625ea1bdf1cff08ca34dd
 quay.io/argoproj/workflow-controller:v3.7.3	sha256:86544f45dfb5eec10a101dd46e4078edc527ca548ed754bcf520ab4a1c80ba31
 quay.io/brancz/kube-rbac-proxy:v0.18.0	sha256:754ab2a723c8fc7ea8e09ae1224f8af5be91849b8b2f2a3735c6237f1c534187
 quay.io/jetstack/cert-manager-cainjector:v1.20.2	sha256:6f5a644135887b2aa7d5cc145072fa56421560e3586ff1f184358022d490f4e1
@@ -38,4 +39,3 @@ quay.io/jetstack/cert-manager-webhook:v1.20.2	sha256:baf651128b9f05c426cbd5e60e2
 registry.k8s.io/jobset/jobset:v0.11.0	sha256:f21cab7d33574502684095b53114fc1b6cb3d83a2d84cd124712899670eab6da
 registry.k8s.io/kueue/kueue:v0.19.2	sha256:8a77be2df3d441d1a99b60eb1625c835b5f4feda5db02ece26818cf2a30c4d86
 tensorflow/serving:2.6.2	sha256:2f0b1213de372be6ddb310f9d5eecc6d6787a595b2466f1911b2b2a557bf9b8b
-

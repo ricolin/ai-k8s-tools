@@ -54,6 +54,13 @@ helm template ai-platform-core "${root}/kubernetes/addons/ai-platform-core" \
 core_output=$(mktemp /tmp/ai-platform-core.namespace.XXXXXX)
 helm template ai-platform-core "${root}/kubernetes/addons/ai-platform-core" \
   >"${core_output}"
+grep -F \
+  'quay.io/argoproj/argoexec:v3.7.3@sha256:d299769f4681ba47fa5e4e00f1c4d31eee782659c43625ea1bdf1cff08ca34dd' \
+  "${core_output}" >/dev/null
+if grep -Fxq '        - quay.io/argoproj/argoexec:v3.7.3' "${core_output}"; then
+  echo 'Argo executor image must be pinned by digest' >&2
+  exit 1
+fi
 python3 - "${core_output}" <<'PY'
 import sys
 import yaml
