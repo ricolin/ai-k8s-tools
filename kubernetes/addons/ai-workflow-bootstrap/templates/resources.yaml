@@ -27,7 +27,7 @@ spec:
                     - name: node
                       image: {{ .Values.trainerRuntime.image }}
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: ResourceFlavor
 metadata:
   name: {{ .Values.queue.flavor }}
@@ -35,36 +35,31 @@ spec:
   nodeLabels:
     {{- toYaml .Values.queue.nodeSelector | nindent 4 }}
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: ClusterQueue
 metadata:
   name: {{ .Values.queue.clusterQueue }}
 spec:
   namespaceSelector: {}
-  cohort: ""
   preemption:
     reclaimWithinCohort: Never
     withinClusterQueue: Never
   resourceGroups:
     - coveredResources:
         - nvidia.com/gpu
-      flavors:
-        - name: {{ .Values.queue.flavor }}
-          resources:
-            - name: nvidia.com/gpu
-              nominalQuota: {{ .Values.queue.gpuQuota }}
-    - coveredResources:
         - cpu
         - memory
       flavors:
         - name: {{ .Values.queue.flavor }}
           resources:
+            - name: nvidia.com/gpu
+              nominalQuota: {{ .Values.queue.gpuQuota | quote }}
             - name: cpu
-              nominalQuota: {{ .Values.queue.cpuQuota }}
+              nominalQuota: {{ .Values.queue.cpuQuota | quote }}
             - name: memory
-              nominalQuota: {{ .Values.queue.memoryQuota }}
+              nominalQuota: {{ .Values.queue.memoryQuota | quote }}
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: LocalQueue
 metadata:
   name: {{ .Values.queue.localQueue }}
