@@ -260,6 +260,35 @@ if grep -Fq '  cohort:' "${workflow_output}"; then
   exit 1
 fi
 grep -F 'resources: ["workflowtaskresults"]' "${workflow_output}" >/dev/null
+python3 - "${workflow_output}" <<'PY'
+import sys
+import yaml
+
+documents = list(yaml.safe_load_all(open(sys.argv[1])))
+role = next(
+    document
+    for document in documents
+    if isinstance(document, dict)
+    and document.get("kind") == "Role"
+    and document.get("metadata", {}).get("name") == "ai-workflow-runner"
+)
+secret_rules = [
+    rule
+    for rule in role["rules"]
+    if rule.get("resources") == ["secrets"]
+]
+if secret_rules != [
+    {
+        "apiGroups": [""],
+        "resources": ["secrets"],
+        "resourceNames": ["mlpipeline-minio-artifact"],
+        "verbs": ["get"],
+    }
+]:
+    raise SystemExit(
+        "workflow runner must read only the KFP artifact credential secret"
+    )
+PY
 if grep -Fq 'ai-build-tools.ricolin.dev/accelerator' "${workflow_output}"; then
   echo 'workflow profile must use the GPU Operator product label' >&2
   exit 1
