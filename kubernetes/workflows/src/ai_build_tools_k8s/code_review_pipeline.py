@@ -22,7 +22,7 @@ RUN_ARGUMENTS = {
 
 def make_pipeline(workflow_image: str):
     @dsl.container_component
-    def trainjob_component(
+    def root_trainjob_component(
         name: str,
         trainer_image: str,
         trainer_image_id: str,
@@ -70,6 +70,58 @@ def make_pipeline(workflow_image: str):
             ],
         )
 
+    @dsl.container_component
+    def child_trainjob_component(
+        name: str,
+        trainer_image: str,
+        trainer_image_id: str,
+        pvc_name: str,
+        config_path: str,
+        parent_result: dsl.Input[dsl.Artifact],
+        evidence_root: str,
+        stage: str,
+        result: dsl.Output[dsl.Artifact],
+    ) -> dsl.ContainerSpec:
+        return dsl.ContainerSpec(
+            image=workflow_image,
+            command=["ai-code-review-trainjob"],
+            args=[
+                "--name",
+                name,
+                "--namespace",
+                "ai-workflows",
+                "--trainer-image",
+                trainer_image,
+                "--pvc",
+                pvc_name,
+                "--config-path",
+                config_path,
+                "--parent-result",
+                parent_result.path,
+                "--gpu-count",
+                "8",
+                "--queue",
+                "ai-workflows",
+                "--runtime",
+                "torch-distributed",
+                "--node-selector-key",
+                "nvidia.com/gpu.product",
+                "--node-selector-value",
+                "NVIDIA-H200",
+                "--image-pull-policy",
+                "Never",
+                "--node-local-image-id",
+                trainer_image_id,
+                "--tolerate-control-plane",
+                "--timeout",
+                "14400",
+                "--evidence-dir",
+                dsl.ConcatPlaceholder([evidence_root, "/", stage]),
+                "--output",
+                result.path,
+            ],
+        )
+
     @dsl.pipeline(name="h200-code-review-trainjob-abc")
     def pipeline(
         trainjob_a_name: str,
@@ -83,7 +135,7 @@ def make_pipeline(workflow_image: str):
         config_c_path: str,
         evidence_root: str,
     ) -> None:
-        stage_a = trainjob_component(
+        stage_a = root_trainjob_component(
             name=trainjob_a_name,
             trainer_image=trainer_image,
             trainer_image_id=trainer_image_id,
@@ -92,24 +144,26 @@ def make_pipeline(workflow_image: str):
             evidence_root=evidence_root,
             stage="release-a",
         )
-        stage_b = trainjob_component(
+        stage_b = child_trainjob_component(
             name=trainjob_b_name,
             trainer_image=trainer_image,
             trainer_image_id=trainer_image_id,
             pvc_name=pvc_name,
             config_path=config_b_path,
+            parent_result=stage_a.outputs["result"],
             evidence_root=evidence_root,
             stage="release-b",
-        ).after(stage_a)
-        stage_c = trainjob_component(
+        )
+        stage_c = child_trainjob_component(
             name=trainjob_c_name,
             trainer_image=trainer_image,
             trainer_image_id=trainer_image_id,
             pvc_name=pvc_name,
             config_path=config_c_path,
+            parent_result=stage_b.outputs["result"],
             evidence_root=evidence_root,
             stage="release-c",
-        ).after(stage_b)
+        )
 
         for task in (stage_a, stage_b, stage_c):
             kubernetes.set_image_pull_policy(task, "Never")
@@ -159,13 +213,17 @@ def submit_run(
     package: Path,
     run_name: str,
     arguments: dict[str, Any],
+    namespace: str,
+    service_account: str,
     timeout: int,
 ) -> dict[str, Any]:
-    client = Client(host=host)
+    client = Client(host=host, namespace=namespace)
     run = client.create_run_from_pipeline_package(
         pipeline_file=str(package),
         arguments=arguments,
         run_name=run_name,
+        namespace=namespace,
+        service_account=service_account,
         enable_caching=False,
     )
     observed = client.wait_for_run_completion(
@@ -179,6 +237,8 @@ def submit_run(
         "run_id": run.run_id,
         "run_name": run_name,
         "state": state,
+        "namespace": namespace,
+        "service_account": service_account,
     }
     if "SUCCEEDED" not in state:
         raise RuntimeError(f"Kubeflow run {run.run_id} ended in state {observed.state}")
@@ -193,6 +253,8 @@ def main() -> None:
     parser.add_argument("--run-name", default="")
     parser.add_argument("--arguments", type=Path)
     parser.add_argument("--run-output", type=Path)
+    parser.add_argument("--namespace", default="ai-workflows")
+    parser.add_argument("--service-account", default="ai-workflow-runner")
     parser.add_argument("--timeout", type=int, default=45000)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -209,6 +271,8 @@ def main() -> None:
             args.output,
             args.run_name,
             arguments,
+            args.namespace,
+            args.service_account,
             args.timeout,
         )
         args.run_output.parent.mkdir(parents=True, exist_ok=True)

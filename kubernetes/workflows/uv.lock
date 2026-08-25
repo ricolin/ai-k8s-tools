@@ -8,13 +8,13 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
+    { name = "kfp" },
+    { name = "kfp-kubernetes" },
     { name = "model-registry" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "kfp" },
-    { name = "kfp-kubernetes" },
     { name = "pillow" },
     { name = "pytest" },
 ]
@@ -22,13 +22,13 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = "==1.40.21" },
+    { name = "kfp", specifier = "==2.16.0" },
+    { name = "kfp-kubernetes", specifier = "==2.16.0" },
     { name = "model-registry", specifier = "==0.3.7" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "kfp", specifier = "==2.16.0" },
-    { name = "kfp-kubernetes", specifier = "==2.16.0" },
     { name = "pillow", specifier = "==11.3.0" },
     { name = "pytest", specifier = "==8.4.1" },
 ]

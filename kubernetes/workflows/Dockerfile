@@ -20,6 +20,8 @@ RUN python -m pip install --no-cache-dir uv==0.10.9 \
     && uv sync --frozen --no-dev --no-install-project
 COPY kubernetes/workflows/src ./src
 RUN uv sync --frozen --no-dev --no-editable
+RUN ai-code-review-pipeline --help >/dev/null \
+    && ai-code-review-trainjob --help >/dev/null
 
 USER 65532:65532
 ENTRYPOINT ["ai-k8s-workflow"]
