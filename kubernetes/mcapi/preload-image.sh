@@ -45,7 +45,7 @@ case ${compression} in
     ;;
 esac
 
-ssh "${ssh_options[@]}" "${ssh_target}" \
+ssh -n "${ssh_options[@]}" "${ssh_target}" \
   "sudo crictl inspecti '${target_image}'" >"${evidence_dir}/target-image.json"
 target_id=$(jq -r '.status.id // empty' "${evidence_dir}/target-image.json")
 [[ ${target_id} =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "target runtime did not return an immutable image ID" >&2; exit 1; }
