@@ -102,3 +102,23 @@ export UV_BIN=/opt/ai-build-tools-bin/uv
 Persist `UV_BIN` in the run ledger. The workflow wrapper also discovers the
 standard `/opt/ai-build-tools-bin/uv` path, but an explicit exported value
 makes resumed shells reproducible.
+
+If the operator host cannot reach PyPI, render a manifest through an already
+preloaded workflow image instead of weakening the source lock or installing
+unreviewed host packages:
+
+```bash
+./kubernetes/tools/render-manifest-in-cluster.sh \
+  --namespace kubeflow --pod render-example \
+  --image ai-k8s-tools.local/workflow:reviewed \
+  --image-id sha256:<observed-node-image-id> \
+  --node-selector-key nvidia.com/gpu.product \
+  --node-selector-value NVIDIA-H200 \
+  --output /path/to/evidence/rendered.json \
+  --tolerate-control-plane -- \
+  ai-code-review-model render-comparison-job <renderer arguments>
+```
+
+The helper retains the renderer Pod specification, server-side dry-run,
+observed Pod, and JSON output. It refuses to overwrite any of them and does not
+grant the Pod API credentials.
