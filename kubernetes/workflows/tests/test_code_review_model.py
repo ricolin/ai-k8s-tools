@@ -184,7 +184,10 @@ def test_trainjob_uses_profile_runtime_kueue_and_workspace() -> None:
     assert trainer["numNodes"] == 1
     assert trainer["numProcPerNode"] == 8
     assert trainer["resourcesPerNode"]["limits"]["nvidia.com/gpu"] == 8
-    pod = value["spec"]["runtimePatches"][0]["trainingRuntimeSpec"]["template"]["spec"]["replicatedJobs"][0]["template"]["spec"]["template"]["spec"]
+    runtime_patch = value["spec"]["runtimePatches"][0]["trainingRuntimeSpec"]
+    replicated_job = runtime_patch["template"]["spec"]["replicatedJobs"][0]
+    pod = replicated_job["template"]["spec"]["template"]["spec"]
+    assert "automountServiceAccountToken" not in pod
     assert pod["nodeSelector"] == {"accelerator": "h200"}
     assert pod["volumes"][0]["persistentVolumeClaim"]["claimName"] == "workspace"
     assert pod["containers"][0]["volumeMounts"][0] == {

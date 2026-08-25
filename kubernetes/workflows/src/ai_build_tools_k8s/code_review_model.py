@@ -312,7 +312,6 @@ def render_training_trainjob(
     require(runtime_name, "runtime_name is required")
 
     pod_patch: dict[str, Any] = {
-        "automountServiceAccountToken": False,
         "securityContext": {
             "runAsNonRoot": True,
             "runAsUser": 65532,
