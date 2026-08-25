@@ -5,7 +5,9 @@ ghcr.io/kubeflow/hub/server:v0.3.9	sha256:1520129cbc06f849f7be6ac73453daa41c7bf6
 ghcr.io/kubeflow/kfp-api-server:2.16.1	sha256:621fdae9bfcc93405eca299c24f715bc7f17dbb76f1b53e8b2b35852e4d7d423
 ghcr.io/kubeflow/kfp-cache-deployer:2.16.1	sha256:88eb38812d6ad9c579abdad7d9b971bb98517da95ea55f22a69a6dfc08cb72f5
 ghcr.io/kubeflow/kfp-cache-server:2.16.1	sha256:7baa7696b18a323482d5acf034d5445b36ae3cf294e577efba725a71de297cc1
+ghcr.io/kubeflow/kfp-driver:2.16.1	sha256:3603ab173d447d1129bff0464418205741d21dcae3e398b97288e4876175c93f
 ghcr.io/kubeflow/kfp-frontend:2.16.1	sha256:86cc488ac808b2c0fcfc13e373c705cc75ab244276d96a389525f4d85f55c5fa
+ghcr.io/kubeflow/kfp-launcher:2.16.1	sha256:96c7b19d9f29db0d3e259a182cbd3c2ba3ebd634500e325ae737dd5c07528786
 ghcr.io/kubeflow/kfp-metadata-envoy:2.16.1	sha256:109913d63d6fd8ea7eafba13222a8f23d5932ce7345da35180c9469d46482697
 ghcr.io/kubeflow/kfp-metadata-writer:2.16.1	sha256:a7d9ad29298cf904f774ecbd3d171a1796626f782419cbbda571ac1af0ddb9f4
 ghcr.io/kubeflow/kfp-persistence-agent:2.16.1	sha256:7c87fd0872492126c26af9a6fe87684d23bebb9effd0d7cf5767b3ad44fd166e

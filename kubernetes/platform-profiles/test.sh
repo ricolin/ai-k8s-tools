@@ -57,6 +57,12 @@ helm template ai-platform-core "${root}/kubernetes/addons/ai-platform-core" \
 grep -F \
   'quay.io/argoproj/argoexec:v3.7.3@sha256:d299769f4681ba47fa5e4e00f1c4d31eee782659c43625ea1bdf1cff08ca34dd' \
   "${core_output}" >/dev/null
+grep -F \
+  'ghcr.io/kubeflow/kfp-driver:2.16.1@sha256:3603ab173d447d1129bff0464418205741d21dcae3e398b97288e4876175c93f' \
+  "${core_output}" >/dev/null
+grep -F \
+  'ghcr.io/kubeflow/kfp-launcher:2.16.1@sha256:96c7b19d9f29db0d3e259a182cbd3c2ba3ebd634500e325ae737dd5c07528786' \
+  "${core_output}" >/dev/null
 if grep -Fxq '        - quay.io/argoproj/argoexec:v3.7.3' "${core_output}"; then
   echo 'Argo executor image must be pinned by digest' >&2
   exit 1

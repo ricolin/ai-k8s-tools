@@ -1877,9 +1877,9 @@ spec:
               key: secretkey
               name: mlpipeline-minio-artifact
         - name: V2_DRIVER_IMAGE
-          value: ghcr.io/kubeflow/kfp-driver:2.16.1
+          value: ghcr.io/kubeflow/kfp-driver:2.16.1@sha256:3603ab173d447d1129bff0464418205741d21dcae3e398b97288e4876175c93f
         - name: V2_LAUNCHER_IMAGE
-          value: ghcr.io/kubeflow/kfp-launcher:2.16.1
+          value: ghcr.io/kubeflow/kfp-launcher:2.16.1@sha256:96c7b19d9f29db0d3e259a182cbd3c2ba3ebd634500e325ae737dd5c07528786
         - name: COMPILED_PIPELINE_SPEC_PATCH
           value: '{}'
         - name: DEFAULT_SECURITY_CONTEXT_RUN_AS_USER
