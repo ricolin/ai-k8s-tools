@@ -146,6 +146,8 @@ def evaluate(config_path: Path) -> None:
             }
             if "expected_finding" in prompt:
                 record["expected_finding"] = prompt["expected_finding"]
+            if "expected_patch_preimage" in prompt:
+                record["expected_patch_preimage"] = prompt["expected_patch_preimage"]
             if normalizations:
                 record["raw_response_sha256"] = (
                     f"sha256:{hashlib.sha256(raw_response.encode()).hexdigest()}"

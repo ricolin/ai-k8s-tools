@@ -134,7 +134,7 @@ def test_quality_gate_rejects_mismatched_hunk_line_counts() -> None:
     generated = generator.record("C", 0)
     answer = json.loads(generated["messages"][2]["content"])
     answer["candidate_fix"]["unified_diff"] = answer["candidate_fix"]["unified_diff"].replace(
-        "@@ -18 +18,3 @@", "@@ -18,2 +18,4 @@"
+        "@@ -18 +18,4 @@", "@@ -18,2 +18,4 @@"
     )
 
     _, errors = quality_gate.validate_response_text(json.dumps(answer))
@@ -148,6 +148,7 @@ def test_generated_candidate_patches_have_exact_hunk_counts() -> None:
         answer = generator.response("C", 0, case, "train", "sha256:" + ("a" * 64))
         _, errors = quality_gate.validate_response_text(json.dumps(answer))
         assert "proposed fix hunk line counts do not match headers" not in errors
+        assert quality_gate.unified_diff_preimage(case["patch"]) == case["snippet"]
 
 
 def test_release_c_cases_cover_all_splits_and_both_review_states() -> None:
@@ -269,6 +270,18 @@ def test_comparison_prompts_match_live_request_shape() -> None:
     assert "tool_argument_keys" in payload["contract"]
     assert payload["contract"]["identifier_rules"]["finding.id"].startswith("reviewer-created")
     assert payload["contract"]["identifier_rules"]["finding.evidence"].startswith("exact value")
+    assert payload["contract"]["identifier_rules"]["candidate_fix.patch_id"].startswith("new lowercase slug")
+    assert payload["contract"]["enum_rules"]["finding.category"] == [
+        "correctness",
+        "reliability",
+        "security",
+        "compatibility",
+        "performance",
+        "testing",
+        "style",
+    ]
+    assert payload["contract"]["reference_index"] == payload["review_packet"]["reference_index"]
+    assert prompts[-1]["expected_patch_preimage"] == payload["review_packet"]["evidence"][0]["snippet"]
 
 
 def test_heldout_prompts_do_not_reuse_training_cases() -> None:
@@ -285,6 +298,42 @@ def test_heldout_prompts_do_not_reuse_training_cases() -> None:
             "line": evidence["line"],
             "evidence": evidence["id"],
         }
+        assert prompt["expected_patch_preimage"] == evidence["snippet"]
+
+
+def test_quality_gate_requires_applicable_heldout_patch_preimage() -> None:
+    generated = generator.record("C", 0)
+    answer = json.loads(generated["messages"][2]["content"])
+    answer["candidate_fix"]["unified_diff"] = answer["candidate_fix"]["unified_diff"].replace(
+        "def append(value, values=[]): values.append(value); return values",
+        "def append(value, values=[]):",
+    )
+
+    result = quality_gate.score(
+        {
+            "stage": "C",
+            "prompt_id": "python-review",
+            "expected_reviewer_identity": answer["reviewer_identity"],
+            "expected_patch_preimage": generator.LANGUAGE_CASES[0]["snippet"],
+            "response": json.dumps(answer),
+        }
+    )
+
+    assert result["pass"] is False
+    assert "proposed fix preimage does not match supplied evidence" in result["contract_errors"]
+
+
+def test_quality_gate_rejects_digest_shaped_patch_id() -> None:
+    generated = generator.record("C", 0)
+    answer = json.loads(generated["messages"][2]["content"])
+    answer["candidate_fix"]["patch_id"] = "sha256:" + ("6" * 64)
+    for task in answer["execution_plan"]["tasks"]:
+        if "patch_id" in task["arguments"]:
+            task["arguments"]["patch_id"] = answer["candidate_fix"]["patch_id"]
+
+    _, errors = quality_gate.validate_response_text(json.dumps(answer))
+
+    assert "proposed fix patch id is invalid" in errors
 
 
 def test_quality_gate_requires_expected_heldout_finding() -> None:

@@ -19,7 +19,7 @@ LANGUAGE_CASES = (
         "impact": "The mutable default is shared across calls and leaks state between independent requests.",
         "recommendation": "Use None as the default and allocate a new list inside the function.",
         "test": "Call append twice without values and assert each result starts from an empty list.",
-        "patch": "diff --git a/src/cache.py b/src/cache.py\n--- a/src/cache.py\n+++ b/src/cache.py\n@@ -18 +18,3 @@\n-def append(value, values=[]):\n+def append(value, values=None):\n+    if values is None:\n+        values = []\n",
+        "patch": "diff --git a/src/cache.py b/src/cache.py\n--- a/src/cache.py\n+++ b/src/cache.py\n@@ -18 +18,4 @@\n-def append(value, values=[]): values.append(value); return values\n+def append(value, values=None):\n+    if values is None:\n+        values = []\n+    values.append(value); return values\n",
     },
     {
         "language": "go",
@@ -27,7 +27,7 @@ LANGUAGE_CASES = (
         "line": 42,
         "category": "reliability",
         "severity": "high",
-        "snippet": "for _, job := range jobs { go func() { run(job) }() }",
+        "snippet": "for _, job := range jobs {\n    go func() { run(job) }()\n}",
         "impact": "The goroutine can observe a reused loop variable and execute the wrong job on affected Go versions.",
         "recommendation": "Pass the loop value as a goroutine argument or create a per-iteration variable.",
         "test": "Run many distinct jobs and assert every input identifier is processed exactly once.",
@@ -63,7 +63,7 @@ LANGUAGE_CASES = (
         "line": 21,
         "category": "compatibility",
         "severity": "medium",
-        "snippet": "uses: vendor/action@main",
+        "snippet": "      uses: vendor/action@main",
         "impact": "The workflow is not reproducible because the action reference can move independently of this change.",
         "recommendation": "Pin the action to a reviewed immutable commit SHA and retain the release tag in a comment.",
         "test": "Validate that every uses entry is pinned to a full commit SHA.",
@@ -75,7 +75,7 @@ LANGUAGE_CASES = (
         "line": 14,
         "category": "testing",
         "severity": "low",
-        "snippet": "def test_lookup_with_vaild_id(self):",
+        "snippet": "    def test_lookup_with_vaild_id(self):",
         "impact": "Name-based selection for the correctly spelled valid-id case can silently skip this test.",
         "recommendation": "Rename the test method so valid is spelled correctly.",
         "test": "Collect the module and assert the correctly spelled valid-id test name is present.",
@@ -183,7 +183,7 @@ LANGUAGE_CASES = (
         "line": 34,
         "category": "reliability",
         "severity": "high",
-        "snippet": "image: registry.example/app:latest",
+        "snippet": "        image: registry.example/app:latest",
         "impact": "The mutable tag can resolve to different bytes across otherwise identical deployments.",
         "recommendation": "Pin the image to the reviewed immutable manifest digest.",
         "test": "Validate that the deployment image contains a sha256 digest reference.",
@@ -195,7 +195,7 @@ LANGUAGE_CASES = (
         "line": 29,
         "category": "security",
         "severity": "high",
-        "snippet": "uses: other/build@v3",
+        "snippet": "      uses: other/build@v3",
         "impact": "A mutable release tag allows third-party action code to change without review.",
         "recommendation": "Pin the action to a reviewed full commit SHA and keep the tag in a comment.",
         "test": "Validate that every external action reference uses a full commit SHA.",
@@ -270,7 +270,7 @@ HELDOUT_CASES = (
         "line": 18,
         "category": "security",
         "severity": "high",
-        "snippet": "uses: example/package@v4",
+        "snippet": "      uses: example/package@v4",
         "impact": "The mutable tag can execute different third-party code without a reviewed change.",
         "recommendation": "Pin the action to its reviewed full commit SHA and retain v4 in a comment.",
         "test": "Validate that every third-party uses reference is pinned to a full commit SHA.",
@@ -282,7 +282,7 @@ HELDOUT_CASES = (
         "line": 39,
         "category": "testing",
         "severity": "low",
-        "snippet": "def test_load_with_sucess(self):",
+        "snippet": "    def test_load_with_sucess(self):",
         "impact": "Correctly spelled name filters can silently skip the success-path test.",
         "recommendation": "Rename the test method so success is spelled correctly.",
         "test": "Collect the module and assert the correctly spelled success-path test is present.",
@@ -308,8 +308,15 @@ SYSTEM_PROMPT = (
     "collect_test_results and draft_review take only evidence_ids. Never schedule inspect_diff when the request "
     "supplies no pull-request lock, and never substitute one lock kind for another. Every task cleanup_required "
     "must be true. pull_request_lock_id must "
-    "be null when the request supplies no pull-request lock. A proposed unified_diff must begin with diff --git, "
-    "contain exactly one --- and one +++ header for each diff --git file section, and end with a newline. "
+    "be null when the request supplies no pull-request lock. reviewer_identity must preserve every character of the "
+    "supplied adapter_digest. Allowed verdicts are APPROVE, COMMENT, and REQUEST_CHANGES. Allowed severities are "
+    "critical, high, medium, and low. Allowed finding categories are correctness, reliability, security, compatibility, "
+    "performance, testing, and style. Allowed candidate-fix statuses are PROPOSED, NOT_NEEDED, and BLOCKED. A proposed "
+    "patch_id must be a new lowercase slug such as fix-1, not a digest or supplied identifier. A proposed unified_diff "
+    "must begin with diff --git, contain exactly one --- and one +++ header for each diff --git file section, and end "
+    "with a newline. In each hunk, the old count must equal context plus deleted lines and the new count must equal "
+    "context plus added lines. Deletion and context lines must reproduce the supplied source evidence exactly; never "
+    "invent preimage source or unrelated files. "
     "The decoded unified_diff must end with that newline, so its serialized JSON string must place \\n "
     "immediately before the closing quote. Encode every newline inside a JSON string as \\n; "
     "review.tests, review.unknowns, and candidate_fix.expected_tests must always be arrays of strings. Never invent "
@@ -386,9 +393,30 @@ def request_payload(
             "task_fields": TASK_FIELDS,
             "allowed_tools": ALLOWED_TOOLS,
             "tool_argument_keys": TOOL_ARGUMENT_KEYS,
+            "reference_index": {
+                "repository_lock_ids": [repository_lock],
+                "pull_request_lock_ids": [pr_lock] if pr_lock else [],
+                "profile_ids": [profile],
+                "evidence_ids": [evidence],
+            },
+            "enum_rules": {
+                "review.verdict": ["APPROVE", "COMMENT", "REQUEST_CHANGES"],
+                "finding.severity": ["critical", "high", "medium", "low"],
+                "finding.category": [
+                    "correctness",
+                    "reliability",
+                    "security",
+                    "compatibility",
+                    "performance",
+                    "testing",
+                    "style",
+                ],
+                "candidate_fix.status": ["PROPOSED", "NOT_NEEDED", "BLOCKED"],
+            },
             "identifier_rules": {
                 "finding.id": "reviewer-created label such as F1",
                 "finding.evidence": "exact value from review_packet.reference_index.evidence_ids",
+                "candidate_fix.patch_id": "new lowercase slug such as fix-1; not a digest or supplied identifier",
             },
         },
     }
@@ -459,7 +487,7 @@ def response(
             {
                 "id": "apply-fix",
                 "tool": "apply_candidate_patch",
-                "arguments": {"patch_id": "candidate-fix-1", "repository_lock_id": repository_lock},
+                "arguments": {"patch_id": "fix-1", "repository_lock_id": repository_lock},
                 "timeout_seconds": 60,
                 "cleanup_required": True,
             },
@@ -468,7 +496,7 @@ def response(
             {
                 "id": "export-fix",
                 "tool": "export_patch",
-                "arguments": {"patch_id": "candidate-fix-1", "repository_lock_id": repository_lock},
+                "arguments": {"patch_id": "fix-1", "repository_lock_id": repository_lock},
                 "timeout_seconds": 60,
                 "cleanup_required": True,
             }
@@ -507,7 +535,7 @@ def response(
         },
         "candidate_fix": {
             "status": "PROPOSED" if propose else "NOT_NEEDED",
-            "patch_id": "candidate-fix-1" if propose else None,
+            "patch_id": "fix-1" if propose else None,
             "unified_diff": case["patch"] if propose else "",
             "rationale": (
                 case["recommendation"]
@@ -644,6 +672,7 @@ def comparison_prompts(
         prompt = {
                 "id": prompt_id,
                 "expected_reviewer_identity": identity,
+                "expected_patch_preimage": case["snippet"],
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": canonical_json(payload).decode()},

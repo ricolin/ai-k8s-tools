@@ -34,6 +34,7 @@ TOOL_ARGUMENT_KEYS = {
 HUNK_HEADER = re.compile(
     r"^@@ -(?:[0-9]+)(?:,([0-9]+))? \+(?:[0-9]+)(?:,([0-9]+))? @@(?: .*)?$"
 )
+PATCH_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 
 def unified_diff_hunks_are_valid(patch: str) -> bool:
@@ -70,6 +71,27 @@ def unified_diff_hunks_are_valid(patch: str) -> bool:
         if observed_old != expected_old or observed_new != expected_new:
             return False
     return found_hunk
+
+
+def unified_diff_preimage(patch: str) -> str | None:
+    """Return the exact old-side text for a single-hunk, single-file patch."""
+    lines = patch.splitlines()
+    hunk_indexes = [index for index, line in enumerate(lines) if HUNK_HEADER.fullmatch(line)]
+    if len(hunk_indexes) != 1 or len([line for line in lines if line.startswith("diff --git ")]) != 1:
+        return None
+    result: list[str] = []
+    index = hunk_indexes[0] + 1
+    while index < len(lines) and not lines[index].startswith(("@@ ", "diff --git ")):
+        line = lines[index]
+        if line.startswith("\\ No newline at end of file"):
+            index += 1
+            continue
+        if line.startswith((" ", "-")):
+            result.append(line[1:])
+        elif not line.startswith("+"):
+            return None
+        index += 1
+    return "\n".join(result)
 
 
 def normalize_response_text(raw: str) -> tuple[str, tuple[str, ...]]:
@@ -123,6 +145,9 @@ def validate_response_text(raw: str) -> tuple[dict[str, Any] | None, list[str]]:
         if not isinstance(expected_tests, list) or not all(isinstance(item, str) for item in expected_tests):
             errors.append("candidate fix expected_tests must be an array of strings")
     if isinstance(fix, dict) and set(fix) == FIX_FIELDS and fix.get("status") == "PROPOSED":
+        patch_id = fix.get("patch_id")
+        if not isinstance(patch_id, str) or PATCH_ID.fullmatch(patch_id) is None:
+            errors.append("proposed fix patch id is invalid")
         patch = fix.get("unified_diff")
         if not isinstance(patch, str) or not re.search(r"^diff --git a/.+ b/.+$", patch, flags=re.MULTILINE):
             errors.append("proposed fix is not a unified diff")
@@ -222,6 +247,13 @@ def score(record: dict[str, Any]) -> dict[str, Any]:
                 errors.append("expected held-out finding was not reported")
             if isinstance(review, dict) and review.get("verdict") != "REQUEST_CHANGES":
                 errors.append("held-out defect verdict must request changes")
+        expected_preimage = record.get("expected_patch_preimage")
+        if record.get("stage") == "C" and isinstance(expected_preimage, str):
+            fix = value.get("candidate_fix")
+            if not isinstance(fix, dict) or fix.get("status") != "PROPOSED":
+                errors.append("evaluated defect requires a proposed fix")
+            elif unified_diff_preimage(str(fix.get("unified_diff", ""))) != expected_preimage:
+                errors.append("proposed fix preimage does not match supplied evidence")
     text = json.dumps(value, sort_keys=True).lower() if value else str(record.get("response", "")).lower()
     required = ["impact", "recommendation", "test"]
     if prompt_id == "pr-agent-fix":

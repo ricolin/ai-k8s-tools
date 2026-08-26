@@ -566,8 +566,10 @@ def make_request(release: dict[str, Any], packet: dict[str, Any]) -> dict[str, A
         "patch only in a disposable sandbox, runs operator-owned unit-test profiles without test-stage egress, and exports "
         "the resulting patch and report without modifying the upstream checkout. Every task cleanup_required must be true. "
         "pull_request_lock_id must be null when no pull-request lock is supplied. A proposed unified_diff must begin with "
-        "diff --git, contain --- and +++ headers, use hunk counts that exactly match the hunk body, and end with a "
-        "newline. When source evidence directly shows a defect and no applied patch plus passing selected-profile "
+        "diff --git, contain --- and +++ headers, and end with a newline. In each hunk, the old count must equal context "
+        "plus deleted lines and the new count must equal context plus added lines. Deletion and context lines must reproduce "
+        "the supplied source evidence exactly; never invent preimage source or unrelated files. When source evidence "
+        "directly shows a defect and no applied patch plus passing selected-profile "
         "result is supplied, report the finding; missing test results alone do not justify APPROVE. Encode newlines "
         "inside JSON strings and keep "
         "review.tests, review.unknowns, and candidate_fix.expected_tests as arrays of strings."
@@ -585,6 +587,20 @@ def make_request(release: dict[str, Any], packet: dict[str, Any]) -> dict[str, A
             "allowed_tools": sorted(ALLOWED_TOOLS),
             "tool_argument_keys": {key: sorted(value) for key, value in sorted(TOOL_ARGUMENT_KEYS.items())},
             "reference_index": {key: sorted(value) for key, value in sorted(index.items())},
+            "enum_rules": {
+                "review.verdict": ["APPROVE", "COMMENT", "REQUEST_CHANGES"],
+                "finding.severity": ["critical", "high", "medium", "low"],
+                "finding.category": [
+                    "correctness",
+                    "reliability",
+                    "security",
+                    "compatibility",
+                    "performance",
+                    "testing",
+                    "style",
+                ],
+                "candidate_fix.status": ["PROPOSED", "NOT_NEEDED", "BLOCKED"],
+            },
             "identifier_rules": {
                 "finding.id": "reviewer-created label such as F1",
                 "finding.evidence": "exact value from review_packet.reference_index.evidence_ids",

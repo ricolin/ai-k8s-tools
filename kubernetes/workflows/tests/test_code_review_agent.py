@@ -191,6 +191,15 @@ def test_request_distinguishes_finding_and_evidence_ids() -> None:
     }
     assert "implementation and test paths" in request["messages"][0]["content"]
     assert "It is not a digest" in request["messages"][0]["content"]
+    assert payload["contract"]["enum_rules"]["finding.category"] == [
+        "correctness",
+        "reliability",
+        "security",
+        "compatibility",
+        "performance",
+        "testing",
+        "style",
+    ]
 
 
 @pytest.mark.parametrize(
