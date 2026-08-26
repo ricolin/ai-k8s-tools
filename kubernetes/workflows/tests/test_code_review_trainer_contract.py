@@ -205,6 +205,20 @@ def test_quality_gate_rejects_mixed_prompt_revisions(tmp_path: Path) -> None:
         quality_gate.evaluate(write_comparison_records(tmp_path, records))
 
 
+def test_quality_gate_accepts_explicit_b_c_stage_subset(tmp_path: Path) -> None:
+    records = [record for record in comparison_records() if record["stage"] in {"B", "C"}]
+
+    result = quality_gate.evaluate(write_comparison_records(tmp_path, records), ("B", "C"))
+
+    assert result["evaluated_stages"] == ["B", "C"]
+
+
+@pytest.mark.parametrize("stages", [("C",), ("C", "B"), ("B", "B", "C"), ("A", "C")])
+def test_quality_gate_rejects_invalid_stage_subset(tmp_path: Path, stages: tuple[str, ...]) -> None:
+    with pytest.raises(ValueError, match="ordered unique subset containing B and C"):
+        quality_gate.evaluate(write_comparison_records(tmp_path, comparison_records()), stages)
+
+
 def test_quality_gate_canonicalizes_unescaped_string_newlines() -> None:
     generated = generator.record("C", 0)
     raw = generated["messages"][2]["content"].replace("\\n", "\n", 1)
