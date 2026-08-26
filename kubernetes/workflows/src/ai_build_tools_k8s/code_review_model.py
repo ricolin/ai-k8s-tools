@@ -29,6 +29,35 @@ REQUIRED_RELEASE_DIGESTS = (
     "agent_plan_schema_digest",
     "policy_profile_digest",
 )
+PROMOTION_STATES = {
+    "TRAINING_COMPLETE",
+    "WORKFLOW_VALIDATED",
+    "QUALITY_REJECTED",
+    "SERVING_CANARY",
+    "PRODUCTION_APPROVED",
+}
+QUALITY_STATES = {"NOT_EVALUATED", "PASS", "FAIL"}
+ALLOWED_PROMOTION_TRANSITIONS = {
+    "TRAINING_COMPLETE": {"WORKFLOW_VALIDATED"},
+    "WORKFLOW_VALIDATED": {"QUALITY_REJECTED", "SERVING_CANARY"},
+    "QUALITY_REJECTED": set(),
+    "SERVING_CANARY": {"PRODUCTION_APPROVED"},
+    "PRODUCTION_APPROVED": set(),
+}
+STATE_MODEL_NAMES = {
+    "TRAINING_COMPLETE": "code-reviewer-c-candidate",
+    "WORKFLOW_VALIDATED": "code-reviewer-c-candidate",
+    "QUALITY_REJECTED": "code-reviewer-c-candidate",
+    "SERVING_CANARY": "code-reviewer-c-canary",
+    "PRODUCTION_APPROVED": "code-reviewer-c",
+}
+STATE_VALIDATION_LEVELS = {
+    "TRAINING_COMPLETE": "TRAINING_COMPLETE",
+    "WORKFLOW_VALIDATED": "WORKFLOW_VALIDATED",
+    "QUALITY_REJECTED": "AUTOMATED_REJECTED",
+    "SERVING_CANARY": "AUTOMATED_ACCEPTED",
+    "PRODUCTION_APPROVED": "AUTOMATED_ACCEPTED",
+}
 
 
 class ContractError(ValueError):
@@ -145,17 +174,84 @@ def validate_dataset(manifest_path: Path, dataset_root: Path) -> dict[str, Any]:
     }
 
 
-def validate_release(release: dict[str, Any]) -> dict[str, Any]:
+def validate_release_artifact(release: dict[str, Any]) -> dict[str, Any]:
     require(release.get("schema_version") == SCHEMA_VERSION, "unsupported release schema")
     require(release.get("stage") == "C", "only Release C can be exported")
-    require(release.get("validation_level") == "AUTOMATED_ACCEPTED", "release is not accepted")
-    require(release.get("serving_model_name") == "code-reviewer-c", "unexpected serving model name")
+    state = release.get("promotion_state")
+    require(state in PROMOTION_STATES, "invalid promotion state")
+    quality = release.get("quality_status")
+    require(quality in QUALITY_STATES, "invalid quality status")
+    require(
+        release.get("validation_level") == STATE_VALIDATION_LEVELS[state],
+        "validation level does not match promotion state",
+    )
+    require(
+        release.get("serving_model_name") == STATE_MODEL_NAMES[state],
+        "serving model name does not match promotion state",
+    )
+    require(
+        release.get("promotion_blocked") is (state != "PRODUCTION_APPROVED"),
+        "promotion_blocked does not match promotion state",
+    )
+    if state in {"TRAINING_COMPLETE", "WORKFLOW_VALIDATED"}:
+        require(quality == "NOT_EVALUATED", "quality must remain unevaluated before its gate")
+    elif state == "QUALITY_REJECTED":
+        require(quality == "FAIL", "a rejected release requires a failed quality gate")
+    else:
+        require(quality == "PASS", "canary and production states require a passed quality gate")
+    history = release.get("promotion_history")
+    require(isinstance(history, list) and history, "promotion history is required")
+    previous_state: str | None = None
+    for index, record in enumerate(history):
+        require(
+            isinstance(record, dict) and set(record) == {"state", "evidence_digest"},
+            f"invalid promotion history record {index}",
+        )
+        record_state = record["state"]
+        require(record_state in PROMOTION_STATES, f"invalid promotion history state {index}")
+        require_sha256(str(record["evidence_digest"]), f"promotion history evidence {index}")
+        if previous_state is None:
+            require(record_state == "TRAINING_COMPLETE", "promotion history must start at TRAINING_COMPLETE")
+        else:
+            require(
+                record_state in ALLOWED_PROMOTION_TRANSITIONS[previous_state],
+                f"invalid promotion transition: {previous_state} -> {record_state}",
+            )
+        previous_state = record_state
+    require(previous_state == state, "promotion history does not end at the current state")
+    if len(history) > 1:
+        require_sha256(str(release.get("parent_release_digest", "")), "parent_release_digest")
+    else:
+        require("parent_release_digest" not in release, "initial release cannot have a parent digest")
     require(set(release.get("supported_languages", [])) == LANGUAGES, "release languages are incomplete")
     require(set(release.get("supported_target_types", [])) == TARGET_TYPES, "release target types are incomplete")
     require(int(release.get("lora_rank", 0)) > 0, "release LoRA rank is required")
     for field in REQUIRED_RELEASE_DIGESTS:
         require_sha256(str(release.get(field, "")), field)
     return release
+
+
+def validate_release(
+    release: dict[str, Any],
+    allowed_states: set[str] | frozenset[str] = frozenset({"PRODUCTION_APPROVED"}),
+) -> dict[str, Any]:
+    validate_release_artifact(release)
+    require(release["promotion_state"] in allowed_states, "release promotion state is not allowed")
+    return release
+
+
+def validate_workflow_candidate(release: dict[str, Any]) -> dict[str, Any]:
+    return validate_release(
+        release,
+        frozenset(
+            {
+                "WORKFLOW_VALIDATED",
+                "QUALITY_REJECTED",
+                "SERVING_CANARY",
+                "PRODUCTION_APPROVED",
+            }
+        ),
+    )
 
 
 def create_release(
@@ -167,16 +263,18 @@ def create_release(
     agent_plan_schema: Path,
     policy_profile: Path,
     lora_rank: int,
+    evidence_digest: str,
 ) -> dict[str, Any]:
     require_sha256(foundation_digest, "foundation_digest")
     require(adapter.is_dir(), "adapter directory is required")
     require(tokenizer.is_dir(), "tokenizer directory is required")
     for path in (chat_template, review_schema, agent_plan_schema, policy_profile):
         require(path.is_file(), f"release input does not exist: {path}")
+    require_sha256(evidence_digest, "promotion evidence digest")
     release = {
         "schema_version": SCHEMA_VERSION,
         "stage": "C",
-        "validation_level": "AUTOMATED_ACCEPTED",
+        "validation_level": STATE_VALIDATION_LEVELS["TRAINING_COMPLETE"],
         "foundation_digest": foundation_digest,
         "adapter_digest": f"sha256:{sha256_tree(adapter)}",
         "tokenizer_digest": f"sha256:{sha256_tree(tokenizer)}",
@@ -184,17 +282,73 @@ def create_release(
         "review_schema_digest": f"sha256:{sha256_file(review_schema)}",
         "agent_plan_schema_digest": f"sha256:{sha256_file(agent_plan_schema)}",
         "policy_profile_digest": f"sha256:{sha256_file(policy_profile)}",
-        "serving_model_name": "code-reviewer-c",
+        "serving_model_name": STATE_MODEL_NAMES["TRAINING_COMPLETE"],
+        "promotion_state": "TRAINING_COMPLETE",
+        "quality_status": "NOT_EVALUATED",
+        "promotion_blocked": True,
+        "promotion_history": [
+            {"state": "TRAINING_COMPLETE", "evidence_digest": evidence_digest},
+        ],
         "lora_rank": lora_rank,
         "supported_languages": sorted(LANGUAGES),
         "supported_target_types": sorted(TARGET_TYPES),
     }
-    return validate_release(release)
+    return validate_release_artifact(release)
+
+
+def transition_release(
+    release: dict[str, Any],
+    target_state: str,
+    evidence_digest: str,
+    quality_status: str,
+) -> dict[str, Any]:
+    validate_release_artifact(release)
+    require(target_state in PROMOTION_STATES, "invalid target promotion state")
+    current_state = release["promotion_state"]
+    require(
+        target_state in ALLOWED_PROMOTION_TRANSITIONS[current_state],
+        f"invalid promotion transition: {current_state} -> {target_state}",
+    )
+    require_sha256(evidence_digest, "promotion evidence digest")
+    require(quality_status in QUALITY_STATES, "invalid quality status")
+    if target_state == "WORKFLOW_VALIDATED":
+        require(quality_status == "NOT_EVALUATED", "workflow validation cannot decide model quality")
+    elif target_state == "QUALITY_REJECTED":
+        require(quality_status == "FAIL", "quality rejection requires quality_status=FAIL")
+    else:
+        require(quality_status == "PASS", "canary and production promotion require quality_status=PASS")
+
+    parent_digest = f"sha256:{hashlib.sha256(canonical_json(release)).hexdigest()}"
+    promoted = json.loads(json.dumps(release))
+    promoted.update(
+        {
+            "promotion_state": target_state,
+            "quality_status": quality_status,
+            "validation_level": STATE_VALIDATION_LEVELS[target_state],
+            "serving_model_name": STATE_MODEL_NAMES[target_state],
+            "promotion_blocked": target_state != "PRODUCTION_APPROVED",
+            "parent_release_digest": parent_digest,
+        }
+    )
+    promoted["promotion_history"].append(
+        {"state": target_state, "evidence_digest": evidence_digest}
+    )
+    return validate_release_artifact(promoted)
 
 
 def require_image(value: str, field: str) -> None:
     require("@sha256:" in value, f"{field} must be digest-pinned")
     require_sha256(f"sha256:{value.rsplit('@sha256:', 1)[1]}", field)
+
+
+def validate_serving_release(release: dict[str, Any], serving_tier: str) -> dict[str, Any]:
+    allowed = {
+        "evaluation": {"WORKFLOW_VALIDATED", "QUALITY_REJECTED"},
+        "canary": {"SERVING_CANARY"},
+        "production": {"PRODUCTION_APPROVED"},
+    }
+    require(serving_tier in allowed, "invalid serving tier")
+    return validate_release(release, frozenset(allowed[serving_tier]))
 
 
 def render_training_job(
@@ -426,8 +580,10 @@ def render_node_local_serving(
     image_pull_policy: str,
     node_local_image_id: str,
     tolerate_control_plane: bool = False,
+    serving_tier: str = "production",
 ) -> dict[str, Any]:
-    validate_release(release)
+    validate_serving_release(release, serving_tier)
+    require(name == release["serving_model_name"], "serving resource name does not match release state")
     require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
     if image_pull_policy == "Never":
         require(":" in serving_image and "@" not in serving_image, "node-local image requires a tag")
@@ -509,6 +665,9 @@ def render_node_local_serving(
         "serving.kserve.io/deploymentMode": "Standard",
         "ai-k8s-tools.ricolin.dev/foundation-digest": release["foundation_digest"],
         "ai-k8s-tools.ricolin.dev/adapter-digest": release["adapter_digest"],
+        "ai-k8s-tools.ricolin.dev/promotion-state": release["promotion_state"],
+        "ai-k8s-tools.ricolin.dev/promotion-blocked": str(release["promotion_blocked"]).lower(),
+        "ai-k8s-tools.ricolin.dev/serving-tier": serving_tier,
     }
     if node_local_image_id:
         annotations["ai-k8s-tools.ricolin.dev/node-local-image-id"] = node_local_image_id
@@ -618,6 +777,7 @@ def render_release_job(
     release_path: str,
     verification_path: str,
     lora_rank: int,
+    evidence_digest: str,
     node_selector_key: str,
     node_selector_value: str,
     image_pull_policy: str,
@@ -625,6 +785,7 @@ def render_release_job(
     tolerate_control_plane: bool = False,
 ) -> dict[str, Any]:
     require_sha256(foundation_digest, "foundation_digest")
+    require_sha256(evidence_digest, "promotion evidence digest")
     require(lora_rank > 0, "lora_rank must be positive")
     require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
     if image_pull_policy == "Never":
@@ -656,6 +817,7 @@ def render_release_job(
         "--agent-plan-schema", agent_plan_schema_path,
         "--policy-profile", policy_profile_path,
         "--lora-rank", str(lora_rank),
+        "--promotion-evidence-digest", evidence_digest,
         "--release-output", release_path,
         "--verification-output", verification_path,
     ]
@@ -728,8 +890,10 @@ def render_serving(
     node_selector_key: str,
     node_selector_value: str,
     tolerate_control_plane: bool = False,
+    serving_tier: str = "production",
 ) -> dict[str, Any]:
-    validate_release(release)
+    validate_serving_release(release, serving_tier)
+    require(name == release["serving_model_name"], "serving resource name does not match release state")
     require_image(vllm_image, "vllm_image")
     require_image(verifier_image, "verifier_image")
     predictor: dict[str, Any] = {
@@ -766,9 +930,9 @@ def render_serving(
                 "imagePullPolicy": "IfNotPresent",
                 "args": [
                     "--model", "/models/foundation",
-                    "--served-model-name", "code-reviewer-c",
+                    "--served-model-name", release["serving_model_name"],
                     "--enable-lora",
-                    "--lora-modules", "code-reviewer-c=/models/adapter",
+                    "--lora-modules", f"{release['serving_model_name']}=/models/adapter",
                     "--max-lora-rank", str(release["lora_rank"]),
                     "--tokenizer", "/models/tokenizer",
                     "--tensor-parallel-size", str(gpu_count),
@@ -797,6 +961,9 @@ def render_serving(
             "annotations": {
                 "serving.kserve.io/deploymentMode": "Standard",
                 "ai-k8s-tools.ricolin.dev/adapter-digest": release["adapter_digest"],
+                "ai-k8s-tools.ricolin.dev/promotion-state": release["promotion_state"],
+                "ai-k8s-tools.ricolin.dev/promotion-blocked": str(release["promotion_blocked"]).lower(),
+                "ai-k8s-tools.ricolin.dev/serving-tier": serving_tier,
             },
         },
         "spec": {"predictor": predictor},
@@ -813,7 +980,7 @@ def verify_mounted_release(
     agent_plan_schema: Path,
     policy_profile: Path,
 ) -> dict[str, Any]:
-    release = validate_release(load_json(release_path))
+    release = validate_release_artifact(load_json(release_path))
     observed = {
         "foundation_digest": f"sha256:{sha256_tree(foundation)}",
         "adapter_digest": f"sha256:{sha256_tree(adapter)}",
@@ -846,10 +1013,19 @@ def build_parser() -> argparse.ArgumentParser:
     release.add_argument("--agent-plan-schema", required=True)
     release.add_argument("--policy-profile", required=True)
     release.add_argument("--lora-rank", type=int, required=True)
+    release.add_argument("--promotion-evidence-digest", required=True)
     release.add_argument("--output", required=True)
 
     validate = commands.add_parser("validate-release")
     validate.add_argument("--release", required=True)
+    validate.add_argument("--allowed-state", action="append", default=[])
+
+    promote = commands.add_parser("promote-release")
+    promote.add_argument("--release", required=True)
+    promote.add_argument("--target-state", choices=sorted(PROMOTION_STATES), required=True)
+    promote.add_argument("--quality-status", choices=sorted(QUALITY_STATES), required=True)
+    promote.add_argument("--evidence-digest", required=True)
+    promote.add_argument("--output", required=True)
 
     mounted = commands.add_parser("verify-mounted-release")
     mounted.add_argument("--release", required=True)
@@ -872,6 +1048,7 @@ def build_parser() -> argparse.ArgumentParser:
     combined.add_argument("--agent-plan-schema", required=True)
     combined.add_argument("--policy-profile", required=True)
     combined.add_argument("--lora-rank", type=int, required=True)
+    combined.add_argument("--promotion-evidence-digest", required=True)
     combined.add_argument("--release-output", required=True)
     combined.add_argument("--verification-output", required=True)
 
@@ -916,6 +1093,7 @@ def build_parser() -> argparse.ArgumentParser:
     serving.add_argument("--node-selector-key", default="")
     serving.add_argument("--node-selector-value", default="")
     serving.add_argument("--tolerate-control-plane", action="store_true")
+    serving.add_argument("--serving-tier", choices=("evaluation", "canary", "production"), default="production")
     serving.add_argument("--output", required=True)
 
     node_serving = commands.add_parser("render-node-local-serving")
@@ -931,6 +1109,7 @@ def build_parser() -> argparse.ArgumentParser:
     node_serving.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="IfNotPresent")
     node_serving.add_argument("--node-local-image-id", default="")
     node_serving.add_argument("--tolerate-control-plane", action="store_true")
+    node_serving.add_argument("--serving-tier", choices=("evaluation", "canary", "production"), default="production")
     node_serving.add_argument("--output", required=True)
 
     comparison = commands.add_parser("render-comparison-job")
@@ -962,6 +1141,7 @@ def build_parser() -> argparse.ArgumentParser:
     release_job.add_argument("--release-path", required=True)
     release_job.add_argument("--verification-path", required=True)
     release_job.add_argument("--lora-rank", type=int, required=True)
+    release_job.add_argument("--promotion-evidence-digest", required=True)
     release_job.add_argument("--node-selector-key", default="")
     release_job.add_argument("--node-selector-value", default="")
     release_job.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="IfNotPresent")
@@ -988,10 +1168,22 @@ def main() -> None:
                     Path(args.agent_plan_schema),
                     Path(args.policy_profile),
                     args.lora_rank,
+                    args.promotion_evidence_digest,
                 ),
             )
         elif args.command == "validate-release":
-            validate_release(load_json(Path(args.release)))
+            allowed = set(args.allowed_state) if args.allowed_state else {"PRODUCTION_APPROVED"}
+            validate_release(load_json(Path(args.release)), allowed)
+        elif args.command == "promote-release":
+            write_json(
+                Path(args.output),
+                transition_release(
+                    load_json(Path(args.release)),
+                    args.target_state,
+                    args.evidence_digest,
+                    args.quality_status,
+                ),
+            )
         elif args.command == "verify-mounted-release":
             result = verify_mounted_release(
                 Path(args.release),
@@ -1019,6 +1211,7 @@ def main() -> None:
                     Path(args.agent_plan_schema),
                     Path(args.policy_profile),
                     args.lora_rank,
+                    args.promotion_evidence_digest,
                 ),
             )
             verification = verify_mounted_release(
@@ -1083,6 +1276,7 @@ def main() -> None:
                     args.node_selector_key,
                     args.node_selector_value,
                     args.tolerate_control_plane,
+                    args.serving_tier,
                 ),
             )
         elif args.command == "render-node-local-serving":
@@ -1101,6 +1295,7 @@ def main() -> None:
                     args.image_pull_policy,
                     args.node_local_image_id,
                     args.tolerate_control_plane,
+                    args.serving_tier,
                 ),
             )
         elif args.command == "render-comparison-job":
@@ -1138,6 +1333,7 @@ def main() -> None:
                     args.release_path,
                     args.verification_path,
                     args.lora_rank,
+                    args.promotion_evidence_digest,
                     args.node_selector_key,
                     args.node_selector_value,
                     args.image_pull_policy,

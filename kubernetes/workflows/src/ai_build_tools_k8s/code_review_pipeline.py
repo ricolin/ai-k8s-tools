@@ -18,6 +18,7 @@ RUN_ARGUMENTS = {
     "config_c_path",
     "evidence_root",
     "workload_namespace",
+    "gpu_count",
 }
 
 
@@ -32,6 +33,7 @@ def make_pipeline(workflow_image: str):
         evidence_root: str,
         stage: str,
         workload_namespace: str,
+        gpu_count: int,
         result: dsl.Output[dsl.Artifact],
     ) -> dsl.ContainerSpec:
         return dsl.ContainerSpec(
@@ -49,7 +51,7 @@ def make_pipeline(workflow_image: str):
                 "--config-path",
                 config_path,
                 "--gpu-count",
-                "8",
+                gpu_count,
                 "--queue",
                 "ai-workflows",
                 "--runtime",
@@ -85,6 +87,7 @@ def make_pipeline(workflow_image: str):
         evidence_root: str,
         stage: str,
         workload_namespace: str,
+        gpu_count: int,
         result: dsl.Output[dsl.Artifact],
     ) -> dsl.ContainerSpec:
         return dsl.ContainerSpec(
@@ -104,7 +107,7 @@ def make_pipeline(workflow_image: str):
                 "--parent-result",
                 parent_result.path,
                 "--gpu-count",
-                "8",
+                gpu_count,
                 "--queue",
                 "ai-workflows",
                 "--runtime",
@@ -142,6 +145,7 @@ def make_pipeline(workflow_image: str):
         config_c_path: str,
         evidence_root: str,
         workload_namespace: str,
+        gpu_count: int = 7,
     ) -> None:
         stage_a = root_trainjob_component(
             name=trainjob_a_name,
@@ -152,6 +156,7 @@ def make_pipeline(workflow_image: str):
             evidence_root=evidence_root,
             stage="release-a",
             workload_namespace=workload_namespace,
+            gpu_count=gpu_count,
         )
         stage_b = child_trainjob_component(
             name=trainjob_b_name,
@@ -163,6 +168,7 @@ def make_pipeline(workflow_image: str):
             evidence_root=evidence_root,
             stage="release-b",
             workload_namespace=workload_namespace,
+            gpu_count=gpu_count,
         )
         stage_c = child_trainjob_component(
             name=trainjob_c_name,
@@ -174,6 +180,7 @@ def make_pipeline(workflow_image: str):
             evidence_root=evidence_root,
             stage="release-c",
             workload_namespace=workload_namespace,
+            gpu_count=gpu_count,
         )
 
         for task in (stage_a, stage_b, stage_c):
@@ -215,8 +222,11 @@ def load_run_arguments(path: Path) -> dict[str, Any]:
         if extra:
             details.append(f"unknown: {', '.join(sorted(extra))}")
         raise ValueError("invalid pipeline arguments (" + "; ".join(details) + ")")
-    if not all(isinstance(value[key], str) and value[key] for key in RUN_ARGUMENTS):
-        raise ValueError("every pipeline argument must be a non-empty string")
+    string_arguments = RUN_ARGUMENTS - {"gpu_count"}
+    if not all(isinstance(value[key], str) and value[key] for key in string_arguments):
+        raise ValueError("every string pipeline argument must be non-empty")
+    if not isinstance(value["gpu_count"], int) or not 1 <= value["gpu_count"] <= 7:
+        raise ValueError("gpu_count must be an integer from 1 through 7")
     return value
 
 

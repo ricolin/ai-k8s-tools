@@ -63,6 +63,7 @@ def render_image_job(
     image_pull_policy: str = "IfNotPresent",
     node_local_image_id: str = "",
     tolerate_control_plane: bool = False,
+    queue_name: str = "",
 ) -> dict[str, Any]:
     _require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
     if image_pull_policy == "Never":
@@ -117,13 +118,133 @@ def render_image_job(
         pod_spec["nodeSelector"] = {node_selector_key: node_selector_value}
     add_control_plane_tolerations(pod_spec, tolerate_control_plane)
     metadata: dict[str, Any] = {"name": name, "namespace": namespace}
+    if queue_name:
+        metadata["labels"] = {"kueue.x-k8s.io/queue-name": queue_name}
     if node_local_image_id:
         metadata["annotations"] = {"ai-build-tools.ricolin.dev/node-local-image-id": node_local_image_id}
+    job_spec: dict[str, Any] = {
+        "backoffLimit": 0,
+        "template": {"metadata": {"labels": {"app": name}}, "spec": pod_spec},
+    }
+    if queue_name:
+        job_spec["suspend"] = True
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
         "metadata": metadata,
-        "spec": {"backoffLimit": 0, "template": {"metadata": {"labels": {"app": name}}, "spec": pod_spec}},
+        "spec": job_spec,
+    }
+
+
+def render_image_trainjob(
+    name: str,
+    namespace: str,
+    image: str,
+    pvc: str,
+    config_path: str,
+    gpu_count: int,
+    queue_name: str,
+    runtime_name: str,
+    node_selector_key: str,
+    node_selector_value: str,
+    image_pull_policy: str = "IfNotPresent",
+    node_local_image_id: str = "",
+    tolerate_control_plane: bool = False,
+) -> dict[str, Any]:
+    _require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
+    if image_pull_policy == "Never":
+        _require(":" in image and "@" not in image, "node-local image must use an explicit tag")
+        _require_sha256(node_local_image_id, "node_local_image_id")
+    else:
+        require_image_digest(image, "image")
+        _require(not node_local_image_id, "node_local_image_id is only valid with imagePullPolicy Never")
+    _require(gpu_count >= 1, "gpu_count must be positive")
+    _require(config_path.startswith("/workspace/"), "config must be on the workspace PVC")
+    _require(queue_name, "queue_name is required")
+    _require(runtime_name, "runtime_name is required")
+
+    pod_patch: dict[str, Any] = {
+        "securityContext": {
+            "runAsNonRoot": True,
+            "runAsUser": 65532,
+            "runAsGroup": 65532,
+            "fsGroup": 65532,
+            "seccompProfile": {"type": "RuntimeDefault"},
+        },
+        "containers": [
+            {
+                "name": "node",
+                "securityContext": _pod_security(),
+                "volumeMounts": [
+                    {"name": "workspace", "mountPath": "/workspace"},
+                    {"name": "dshm", "mountPath": "/dev/shm"},
+                ],
+            }
+        ],
+        "volumes": [
+            {"name": "workspace", "persistentVolumeClaim": {"claimName": pvc}},
+            {"name": "dshm", "emptyDir": {"medium": "Memory", "sizeLimit": "32Gi"}},
+        ],
+    }
+    if node_selector_key and node_selector_value:
+        pod_patch["nodeSelector"] = {node_selector_key: node_selector_value}
+    add_control_plane_tolerations(pod_patch, tolerate_control_plane)
+
+    annotations = {"ai-build-tools.ricolin.dev/training-primitive": "kubeflow-trainer-v2"}
+    if node_local_image_id:
+        annotations["ai-build-tools.ricolin.dev/node-local-image-id"] = node_local_image_id
+    return {
+        "apiVersion": "trainer.kubeflow.org/v1alpha1",
+        "kind": "TrainJob",
+        "metadata": {
+            "name": name,
+            "namespace": namespace,
+            "labels": {"kueue.x-k8s.io/queue-name": queue_name},
+            "annotations": annotations,
+        },
+        "spec": {
+            "activeDeadlineSeconds": 14400,
+            "runtimeRef": {
+                "apiGroup": "trainer.kubeflow.org",
+                "kind": "ClusterTrainingRuntime",
+                "name": runtime_name,
+            },
+            "trainer": {
+                "numNodes": 1,
+                "numProcPerNode": 1,
+                "image": image,
+                "command": ["python"],
+                "args": ["/opt/ai-build-tools-image/train_stage.py", "--config", config_path],
+                "env": [
+                    {"name": "HF_HUB_OFFLINE", "value": "1"},
+                    {"name": "TRANSFORMERS_OFFLINE", "value": "1"},
+                    {"name": "HF_DATASETS_OFFLINE", "value": "1"},
+                ],
+                "resourcesPerNode": {
+                    "requests": {"nvidia.com/gpu": gpu_count, "cpu": "8", "memory": "64Gi"},
+                    "limits": {"nvidia.com/gpu": gpu_count, "cpu": "64", "memory": "512Gi"},
+                },
+            },
+            "runtimePatches": [
+                {
+                    "manager": "ai-k8s-tools.ricolin.dev/image-workflow",
+                    "trainingRuntimeSpec": {
+                        "template": {
+                            "spec": {
+                                "replicatedJobs": [
+                                    {
+                                        "name": "node",
+                                        "template": {
+                                            "spec": {"template": {"spec": pod_patch}},
+                                        },
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                }
+            ],
+        },
     }
 
 
@@ -194,7 +315,24 @@ def build_parser() -> argparse.ArgumentParser:
     job.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="IfNotPresent")
     job.add_argument("--node-local-image-id", default="")
     job.add_argument("--tolerate-control-plane", action="store_true")
+    job.add_argument("--queue", default="")
     job.add_argument("--output", required=True)
+
+    trainjob = commands.add_parser("render-trainjob")
+    trainjob.add_argument("--name", required=True)
+    trainjob.add_argument("--namespace", required=True)
+    trainjob.add_argument("--image", required=True)
+    trainjob.add_argument("--pvc", required=True)
+    trainjob.add_argument("--config-path", required=True)
+    trainjob.add_argument("--gpu-count", required=True, type=int)
+    trainjob.add_argument("--queue", default="ai-workflows")
+    trainjob.add_argument("--runtime", default="torch-distributed")
+    trainjob.add_argument("--node-selector-key", default="")
+    trainjob.add_argument("--node-selector-value", default="")
+    trainjob.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="IfNotPresent")
+    trainjob.add_argument("--node-local-image-id", default="")
+    trainjob.add_argument("--tolerate-control-plane", action="store_true")
+    trainjob.add_argument("--output", required=True)
     return parser
 
 
@@ -214,6 +352,26 @@ def main() -> None:
                     args.config_path,
                     args.gpu_count,
                     args.mode,
+                    args.node_selector_key,
+                    args.node_selector_value,
+                    args.image_pull_policy,
+                    args.node_local_image_id,
+                    args.tolerate_control_plane,
+                    args.queue,
+                ),
+            )
+        elif args.command == "render-trainjob":
+            write_json(
+                Path(args.output),
+                render_image_trainjob(
+                    args.name,
+                    args.namespace,
+                    args.image,
+                    args.pvc,
+                    args.config_path,
+                    args.gpu_count,
+                    args.queue,
+                    args.runtime,
                     args.node_selector_key,
                     args.node_selector_value,
                     args.image_pull_policy,

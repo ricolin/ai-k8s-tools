@@ -4,11 +4,14 @@ trainerRuntime:
   name: torch-distributed
   image: >-
     pytorch/pytorch:2.10.0-cuda12.8-cudnn9-runtime@sha256:b85566342b86d13a67712e9315d40cdc2dad7f8d86df1aff3831f80835edbcca
+capacity:
+  totalGpuCount: 8
+  servingGpuReserve: 1
 queue:
   flavor: h200
   clusterQueue: h200-ai
   localQueue: ai-workflows
-  gpuQuota: 8
+  gpuQuota: 7
   cpuQuota: 64
   memoryQuota: 512Gi
   nodeSelector:

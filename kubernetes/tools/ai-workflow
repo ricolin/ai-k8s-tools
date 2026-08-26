@@ -20,15 +20,17 @@ cd "${workflow_root}"
 
 show_help() {
   cat <<'EOF'
-usage: ai-workflow {capabilities|agent|model|image|research|code-review|code-agent|code-sandbox|RESEARCH_COMMAND} ...
+usage: ai-workflow {capabilities|agent|model|image|image-pipeline|research|code-review|code-review-pipeline|code-agent|code-sandbox|RESEARCH_COMMAND} ...
 
 Command groups:
   capabilities       Print implemented contract capabilities.
   agent              Validate a released adviser and a grounded typed plan.
   model              Validate datasets/releases and render training/serving.
-  image              Validate image prompts and render CUDA Jobs.
+  image              Validate image prompts and render CUDA workloads.
+  image-pipeline     Compile or submit the KFP-owned image A/B/gallery pipeline.
   research           Lock source/runtime evidence and render private reports.
   code-review        Validate code-review data/releases and render training/serving.
+  code-review-pipeline Compile or submit the KFP-owned code-review A/B/C pipeline.
   code-agent         Generate and validate grounded review, fix, and test plans.
   code-sandbox       Render isolated fetch, patch, unit-test, and patch-export Jobs.
   RESEARCH_COMMAND   Compatibility shortcut for a research subcommand.
@@ -52,7 +54,11 @@ case "${command_name}" in
       security-model-kserve-vllm-v1 \
       code-review-model-abc-v1 \
       code-review-agent-patch-v1 \
-      code-review-sandbox-v1
+      code-review-sandbox-v1 \
+      kfp-trainer-kueue-code-review-v1 \
+      kfp-trainer-kueue-image-v1 \
+      reserved-serving-capacity-v1 \
+      promotion-lifecycle-v1
     ;;
   agent)
     shift
@@ -66,6 +72,10 @@ case "${command_name}" in
     shift
     exec "${uv_bin}" run --frozen ai-image-model "$@"
     ;;
+  image-pipeline)
+    shift
+    exec "${uv_bin}" run --frozen ai-image-pipeline "$@"
+    ;;
   research)
     shift
     exec "${uv_bin}" run --frozen ai-security-research "$@"
@@ -73,6 +83,10 @@ case "${command_name}" in
   code-review)
     shift
     exec "${uv_bin}" run --frozen ai-code-review-model "$@"
+    ;;
+  code-review-pipeline)
+    shift
+    exec "${uv_bin}" run --frozen ai-code-review-pipeline "$@"
     ;;
   code-agent)
     shift

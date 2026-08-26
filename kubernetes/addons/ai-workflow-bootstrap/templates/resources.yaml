@@ -1,4 +1,16 @@
 {{- if .Values.enabled }}
+{{- $totalGpuCount := int .Values.capacity.totalGpuCount }}
+{{- $servingGpuReserve := int .Values.capacity.servingGpuReserve }}
+{{- $trainingGpuQuota := int .Values.queue.gpuQuota }}
+{{- if lt $totalGpuCount 1 }}
+{{- fail "capacity.totalGpuCount must be positive" }}
+{{- end }}
+{{- if or (lt $servingGpuReserve 1) (ge $servingGpuReserve $totalGpuCount) }}
+{{- fail "capacity.servingGpuReserve must be positive and lower than capacity.totalGpuCount" }}
+{{- end }}
+{{- if ne $trainingGpuQuota (sub $totalGpuCount $servingGpuReserve) }}
+{{- fail "queue.gpuQuota must equal capacity.totalGpuCount minus capacity.servingGpuReserve" }}
+{{- end }}
 apiVersion: trainer.kubeflow.org/v1alpha1
 kind: ClusterTrainingRuntime
 metadata:
@@ -131,6 +143,8 @@ data:
   queue: {{ .Values.queue.localQueue | quote }}
   clusterQueue: {{ .Values.queue.clusterQueue | quote }}
   flavor: {{ .Values.queue.flavor | quote }}
-  gpuQuota: {{ .Values.queue.gpuQuota | quote }}
+  totalGpuCount: {{ .Values.capacity.totalGpuCount | quote }}
+  servingGpuReserve: {{ .Values.capacity.servingGpuReserve | quote }}
+  trainingGpuQuota: {{ .Values.queue.gpuQuota | quote }}
   trainerRuntime: "torch-distributed"
 {{- end }}

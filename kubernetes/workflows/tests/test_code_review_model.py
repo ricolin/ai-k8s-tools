@@ -15,6 +15,7 @@ from ai_build_tools_k8s.code_review_model import (
     render_serving,
     render_training_job,
     render_training_trainjob,
+    transition_release,
     validate_dataset,
     validate_dataset_record,
     validate_release,
@@ -38,6 +39,16 @@ def release() -> dict:
         "agent_plan_schema_digest": digest("f"),
         "policy_profile_digest": digest("1"),
         "serving_model_name": "code-reviewer-c",
+        "promotion_state": "PRODUCTION_APPROVED",
+        "quality_status": "PASS",
+        "promotion_blocked": False,
+        "parent_release_digest": digest("2"),
+        "promotion_history": [
+            {"state": "TRAINING_COMPLETE", "evidence_digest": digest("3")},
+            {"state": "WORKFLOW_VALIDATED", "evidence_digest": digest("4")},
+            {"state": "SERVING_CANARY", "evidence_digest": digest("5")},
+            {"state": "PRODUCTION_APPROVED", "evidence_digest": digest("6")},
+        ],
         "lora_rank": 16,
         "supported_languages": ["bash", "go", "python", "rust", "yaml"],
         "supported_target_types": ["agent-plan", "pull-request", "repository", "single-file"],
@@ -69,6 +80,57 @@ def test_release_contract() -> None:
     invalid["supported_languages"].remove("rust")
     with pytest.raises(ContractError, match="languages are incomplete"):
         validate_release(invalid)
+
+
+def test_release_lifecycle_blocks_rejected_candidates_from_production() -> None:
+    candidate = release()
+    candidate.update(
+        {
+            "validation_level": "WORKFLOW_VALIDATED",
+            "serving_model_name": "code-reviewer-c-candidate",
+            "promotion_state": "WORKFLOW_VALIDATED",
+            "quality_status": "NOT_EVALUATED",
+            "promotion_blocked": True,
+            "promotion_history": candidate["promotion_history"][:2],
+        }
+    )
+    rejected = transition_release(candidate, "QUALITY_REJECTED", digest("7"), "FAIL")
+    assert rejected["promotion_blocked"] is True
+    assert rejected["serving_model_name"] == "code-reviewer-c-candidate"
+    with pytest.raises(ContractError, match="promotion state is not allowed"):
+        validate_release(rejected)
+    evaluation = render_node_local_serving(
+        rejected,
+        "code-reviewer-c-candidate",
+        "ai-workflows",
+        "reviewer:v1",
+        "workspace",
+        "/workspace/foundation",
+        "/workspace/adapter",
+        "accelerator",
+        "h200",
+        "Never",
+        digest("9"),
+        True,
+        "evaluation",
+    )
+    assert evaluation["metadata"]["annotations"]["ai-k8s-tools.ricolin.dev/promotion-blocked"] == "true"
+    with pytest.raises(ContractError, match="promotion state is not allowed"):
+        render_node_local_serving(
+            rejected,
+            "code-reviewer-c",
+            "ai-workflows",
+            "reviewer:v1",
+            "workspace",
+            "/workspace/foundation",
+            "/workspace/adapter",
+            "accelerator",
+            "h200",
+            "Never",
+            digest("9"),
+            True,
+            "production",
+        )
 
 
 def test_dataset_covers_every_language(tmp_path: Path) -> None:
@@ -276,6 +338,7 @@ def test_release_job_verifies_mounted_artifacts_without_a_gpu() -> None:
         "/workspace/release/code-review-release.json",
         "/workspace/release/mounted-verification.json",
         16,
+        digest("7"),
         "accelerator",
         "h200",
         "Never",

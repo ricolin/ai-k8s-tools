@@ -1,9 +1,15 @@
 # Sandboxed Repository And Pull-Request Review Agent
 
-This follow-up reuses an accepted `code-reviewer-c` adapter. The model reviews
+This follow-up reuses a lifecycle-labelled `code-reviewer-c` adapter. The model reviews
 supplied repository or pull-request evidence, may propose one text-only unified
 diff, and selects an operator-owned test profile. The broker validates all
 identifiers and patch paths before Kubernetes sees the candidate.
+
+For workflow validation, the broker accepts `WORKFLOW_VALIDATED`,
+`QUALITY_REJECTED`, `SERVING_CANARY`, or `PRODUCTION_APPROVED` artifacts. A
+quality-rejected artifact keeps the `code-reviewer-c-candidate` identity and
+must be served only on an evaluation endpoint; it cannot become the production
+alias.
 
 The agent never invents or executes shell commands. Commands and digest-pinned
 images live in the selected profile. The model can request patch application,

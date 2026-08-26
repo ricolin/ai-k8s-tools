@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,7 @@ def test_pipeline_submits_sequential_trainjobs_without_gpu_task_requests(tmp_pat
     assert "workload_namespace" in rendered
     assert "nvidia.com/gpu.product" in rendered
     assert "NVIDIA-H200" in rendered
+    assert "gpu_count" in rendered
     assert 'key: nvidia.com/gpu' not in rendered
     platform = next(
         document
@@ -52,13 +54,33 @@ def test_pipeline_arguments_require_the_exact_contract(tmp_path: Path) -> None:
   "config_b_path": "/workspace/b.json",
   "config_c_path": "/workspace/c.json",
   "evidence_root": "/workspace/evidence",
-  "workload_namespace": "kubeflow"
+  "workload_namespace": "kubeflow",
+  "gpu_count": 7
 }\n"""
     )
     assert load_run_arguments(path)["trainjob_c_name"] == "train-c"
+    assert load_run_arguments(path)["gpu_count"] == 7
 
     path.write_text('{"trainjob_a_name": "train-a"}\n')
     with pytest.raises(ValueError, match="missing"):
+        load_run_arguments(path)
+
+    value = {
+        "trainjob_a_name": "train-a",
+        "trainjob_b_name": "train-b",
+        "trainjob_c_name": "train-c",
+        "trainer_image": "trainer:v1",
+        "trainer_image_id": "sha256:abc",
+        "pvc_name": "workspace",
+        "config_a_path": "/workspace/a.json",
+        "config_b_path": "/workspace/b.json",
+        "config_c_path": "/workspace/c.json",
+        "evidence_root": "/workspace/evidence",
+        "workload_namespace": "kubeflow",
+        "gpu_count": 8,
+    }
+    path.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match="1 through 7"):
         load_run_arguments(path)
 
 

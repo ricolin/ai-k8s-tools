@@ -11,6 +11,7 @@ from ai_build_tools_k8s.image_model import (
     ContractError,
     create_release_manifest,
     render_image_job,
+    render_image_trainjob,
     validate_comparison_prompts,
 )
 
@@ -92,6 +93,53 @@ def test_image_jobs_have_explicit_gpu_scope_and_offline_inputs() -> None:
         "emptyDir": {"medium": "Memory", "sizeLimit": "32Gi"},
     }
     assert {item["mountPath"] for item in train_container["volumeMounts"]} == {"/workspace", "/dev/shm"}
+
+
+def test_image_generation_job_can_be_admitted_by_kueue() -> None:
+    job = render_image_job(
+        "image-gallery",
+        "kubeflow",
+        "registry.example/image@" + digest("a"),
+        "workspace",
+        "/workspace/config/generate.json",
+        1,
+        "generate",
+        "accelerator",
+        "h200",
+        queue_name="ai-workflows",
+    )
+    assert job["metadata"]["labels"] == {"kueue.x-k8s.io/queue-name": "ai-workflows"}
+    assert job["spec"]["suspend"] is True
+
+
+def test_image_trainjob_uses_trainer_kueue_and_seven_gpu_reservation() -> None:
+    trainjob = render_image_trainjob(
+        "image-a",
+        "kubeflow",
+        "ai-k8s-tools.local/image-workflow:v1",
+        "workspace",
+        "/workspace/config/A.json",
+        7,
+        "ai-workflows",
+        "torch-distributed",
+        "nvidia.com/gpu.product",
+        "NVIDIA-H200",
+        "Never",
+        digest("f"),
+        True,
+    )
+    assert trainjob["kind"] == "TrainJob"
+    assert trainjob["metadata"]["labels"] == {"kueue.x-k8s.io/queue-name": "ai-workflows"}
+    assert trainjob["spec"]["runtimeRef"]["name"] == "torch-distributed"
+    trainer = trainjob["spec"]["trainer"]
+    assert trainer["numProcPerNode"] == 1
+    assert trainer["resourcesPerNode"]["limits"]["nvidia.com/gpu"] == 7
+    assert trainer["command"] == ["python"]
+    assert trainer["args"] == [
+        "/opt/ai-build-tools-image/train_stage.py",
+        "--config",
+        "/workspace/config/A.json",
+    ]
 
 
 def test_image_job_can_tolerate_control_plane_taints() -> None:

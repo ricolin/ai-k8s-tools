@@ -10,14 +10,18 @@ research work separate from the standalone bare-metal workflow in
 - provider-neutral Kubeflow Pipelines and Model Registry lifecycle mechanics;
 - mCAPI-compatible Kubernetes profiles and deployment helpers;
 - physical NVIDIA H200 and CUDA acceptance templates;
-- SDXL watercolor/detail A/B training and comparison jobs;
-- Qwen code-review A/B/C training for Bash, Python, Go, Rust, and YAML;
+- KFP-owned SDXL watercolor/Impressionist A/B training through Kubeflow
+  Trainer, JobSet, and Kueue, followed by queued comparison galleries;
+- KFP-owned Qwen code-review A/B/C training through the same admission path
+  for Bash, Python, Go, Rust, and YAML;
 - a sandboxed repository and pull-request agent that can test and export a
   candidate `fix.patch` without pushing or publishing it;
 - retained Qwen security-adviser A/B/C and research resources in separate
   `security` paths;
 - an analysis-only security agent and public-source/runtime research sandbox;
 - immutable evidence, dataset, source, release, and reports-only gates; and
+- explicit `TRAINING_COMPLETE`, `WORKFLOW_VALIDATED`, `QUALITY_REJECTED`,
+  `SERVING_CANARY`, and `PRODUCTION_APPROVED` lifecycle enforcement; and
 - local fixture validation that does not claim physical GPU proof.
 
 This repository does not contain a site-specific address, kubeconfig,
@@ -79,6 +83,7 @@ python3 -m py_compile \
 ./kubernetes/addons/nvidia-ai-readiness/test-render.sh
 ./kubernetes/bundles/workspace/test-render.sh
 ./kubernetes/bundles/kubeflow-kserve/test-contract.sh
+./kubernetes/platform-profiles/test.sh
 ```
 
 The final verifier proves local contracts and a synthetic fixture only. It

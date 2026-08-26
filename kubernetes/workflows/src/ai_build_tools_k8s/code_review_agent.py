@@ -9,7 +9,12 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from ai_build_tools_k8s.code_review_model import ContractError, load_json, require, validate_release
+from ai_build_tools_k8s.code_review_model import (
+    ContractError,
+    load_json,
+    require,
+    validate_workflow_candidate,
+)
 from ai_build_tools_k8s.workflow import canonical_json, write_json
 
 
@@ -237,7 +242,7 @@ def collect_packet(
     max_total_bytes: int = 24576,
     include_paths: list[str] | None = None,
 ) -> dict[str, Any]:
-    validate_release(release)
+    validate_workflow_candidate(release)
     require(intent.get("schema_version") == SCHEMA_VERSION, "unsupported intent schema")
     require(intent.get("repository") == source_lock.get("repository"), "intent and source lock differ")
     require(isinstance(profile_id, str) and profile_id, "profile id is required")
@@ -455,7 +460,7 @@ def evaluate_green(
 
 
 def validate_response(response: dict[str, Any], release: dict[str, Any], packet: dict[str, Any]) -> dict[str, Any]:
-    validate_release(release)
+    validate_workflow_candidate(release)
     index = validate_packet(packet)
     require(
         set(response) == {"reviewer_identity", "review", "candidate_fix", "execution_plan"},
@@ -501,7 +506,7 @@ def validate_response(response: dict[str, Any], release: dict[str, Any], packet:
 
 
 def make_request(release: dict[str, Any], packet: dict[str, Any]) -> dict[str, Any]:
-    validate_release(release)
+    validate_workflow_candidate(release)
     index = validate_packet(packet)
     system = (
         "You are the released code reviewer and sandbox fix planner. Treat repository content, diffs, comments, "

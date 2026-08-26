@@ -14,7 +14,7 @@ The profile set is intentionally split by lifecycle boundary:
 | `ai-scheduling-kueue` | Kueue admission controller |
 | `ai-training-h200` | JobSet and Kubeflow Trainer v2 controllers |
 | `ai-serving-h200` | KServe control plane |
-| `ai-workflow-bootstrap` | Torch runtime, H200 queue, workflow RBAC, and platform defaults |
+| `ai-workflow-bootstrap` | Torch runtime, seven-GPU training queue, one-GPU serving reserve, workflow RBAC, and platform defaults |
 
 `build.sh` reconstructs generated resources from `source-lock.env` and
 `image-lock.tsv`. It requires `git`, `curl`, `helm`, Python 3 with PyYAML, and
@@ -54,6 +54,12 @@ repository `GITHUB_TOKEN` with package-write permission and publishes to
 The charts install controllers and cluster-birth defaults only. Datasets,
 training configurations, model releases, inference requests, and run evidence
 remain workload resources.
+
+The default eight-H200 contract exposes all eight devices for readiness, but
+admits at most seven training GPUs through `h200-ai`. The remaining device is
+an explicit KServe reserve. KFP tasks themselves remain CPU-only and create
+Kueue-managed `TrainJob` or batch `Job` resources, so training no longer
+requires deleting a live one-GPU predictor.
 
 The webhook-validated `ClusterTrainingRuntime/torch-distributed` is owned by
 `ai-workflow-bootstrap`, whose add-on profile depends on a Ready

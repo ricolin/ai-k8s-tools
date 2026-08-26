@@ -1,9 +1,11 @@
 # H200 Code-Review Model Workflow
 
 This workflow specializes a frozen causal-language foundation into a code
-reviewer for Bash, Python, Go, Rust, and YAML. It uses the offline eight-GPU
-LoRA engine with a dedicated dataset, contract, evaluator, release, and serving
-identity.
+reviewer for Bash, Python, Go, Rust, and YAML. KFP owns the A/B/C DAG; each
+stage becomes a Kubeflow Trainer `TrainJob`, Trainer materializes JobSet, and
+Kueue admits a seven-GPU request while one H200 remains available for serving.
+The workflow retains a dedicated dataset, contract, evaluator, release, and
+serving identity.
 
 The packaged single-user KFP control plane creates Workflow Pods in
 `kubeflow`. Keep the KFP run namespace, `workload_namespace`, LocalQueue,
@@ -66,26 +68,31 @@ Each config follows the existing offline trainer schema. A has no parent. B
 uses the accepted immutable A adapter. C uses the accepted immutable B adapter.
 Use a distinct output directory for every attempt.
 
+Compile and submit the KFP package with the exact source-locked workflow image
+and a JSON argument file. Set `gpu_count` to `7`; the platform contract rejects
+an eight-GPU training request because one device is reserved for KServe.
+
 ```bash
-kubernetes/tools/ai-workflow code-review render-training-job \
-  --name code-reviewer-a-RUN_ID \
+kubernetes/tools/ai-workflow code-review-pipeline \
+  --workflow-image registry.example/ai/workflows@sha256:REPLACE \
+  --output evidence/code-review-pipeline.yaml \
+  --kfp-host http://ml-pipeline.kubeflow.svc.cluster.local:8888 \
+  --run-name code-review-RUN_ID \
+  --arguments evidence/code-review-pipeline-arguments.json \
+  --run-output evidence/code-review-pipeline-run.json \
   --namespace kubeflow \
-  --trainer-image registry.example/ai/code-review-trainer@sha256:REPLACE \
-  --pvc ai-model-workspace \
-  --config-path /workspace/runs/RUN_ID/code-review/configs/release-a.json \
-  --gpu-count 8 \
-  --node-selector-key nvidia.com/gpu.product \
-  --node-selector-value NVIDIA-H200 \
-  --tolerate-control-plane \
-  --output evidence/release-a-job.json
+  --service-account ai-workflow-runner
 ```
 
 Use `--tolerate-control-plane` only when the selected GPU node is intentionally
 also a Kubernetes control-plane node. The option defaults to disabled.
 
-Apply only after `kubectl apply --dry-run=server` succeeds. Require
-`world_size: 8`, eight unique H200 rank identities, the expected
+The KFP component Pods are CPU-only. Require a KFP `SUCCEEDED` state, a
+Kueue-admitted Workload, completed TrainJob and JobSet identities, and
+`world_size: 7` with seven unique H200 rank identities, the expected
 foundation/dataset identities, and an unchanged parent digest for B and C.
+The direct `render-training-job` command remains a break-glass diagnostic path;
+it is not the accepted end-to-end workflow.
 
 ## Compare And Gate
 
@@ -98,13 +105,25 @@ python /opt/ai-code-review/quality_gate.py \
   --output /workspace/runs/RUN_ID/code-review/comparison/quality-gate.json
 ```
 
-Do not export or serve C unless the gate reports `PASS`.
+Do not promote C when the gate fails. A rejected candidate may be served only
+with `--serving-tier evaluation`; it remains explicitly promotion-blocked.
 
 ## Create And Serve Release C
 
 Create `code-review-release.json` with `ai-code-review-model create-release`.
 The release pins the foundation, adapter, tokenizer, chat template, review
-schema, agent-plan schema, and policy profile. Render KServe with:
+schema, agent-plan schema, and policy profile. It starts at
+`TRAINING_COMPLETE`. Promote immutable copies through:
+
+```text
+TRAINING_COMPLETE -> WORKFLOW_VALIDATED
+WORKFLOW_VALIDATED -> QUALITY_REJECTED
+WORKFLOW_VALIDATED -> SERVING_CANARY -> PRODUCTION_APPROVED
+```
+
+Every transition requires a `sha256:` evidence digest. Only
+`PRODUCTION_APPROVED` can render `--serving-tier production`; only
+`SERVING_CANARY` can render canary. Render production KServe with:
 
 ```bash
 kubernetes/tools/ai-workflow code-review render-serving \
@@ -118,6 +137,7 @@ kubernetes/tools/ai-workflow code-review render-serving \
   --node-selector-key nvidia.com/gpu.product \
   --node-selector-value NVIDIA-H200 \
   --tolerate-control-plane \
+  --serving-tier production \
   --output evidence/code-reviewer-c-inferenceservice.json
 ```
 

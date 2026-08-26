@@ -83,7 +83,27 @@ The resulting payload digest is the `base_digest` consumed by every training
 and generation configuration. Do not compare a raw download tree that still
 contains `.cache` with a normalized payload tree.
 
-## Render training and generation Jobs
+## Run through KFP, Trainer, and Kueue
+
+The supported workflow compiles one KFP DAG. Release A and B are submitted as
+Kubeflow Trainer `TrainJob` resources and admitted by Kueue. Foundation, A,
+and B galleries are queued batch Jobs after training completes. The default
+seven-GPU training request preserves one of eight H200 GPUs for KServe.
+
+```bash
+./kubernetes/tools/ai-workflow image-pipeline \
+  --workflow-image registry.example/ai-workflow@sha256:<digest> \
+  --output evidence/image-pipeline.yaml
+```
+
+Supply the exact run arguments and KFP endpoint to the same command to submit
+the package. The workflow container components do not request GPUs; they own,
+wait for, and retain evidence from the GPU workloads.
+
+## Break-glass direct Jobs
+
+The direct renderer remains available for diagnosis when KFP or Trainer is
+unhealthy. It is not the accepted end-to-end training path.
 
 ```bash
 ./kubernetes/tools/ai-workflow image render-job \
@@ -92,10 +112,10 @@ contains `.cache` with a normalized payload tree.
   --image "${CUDA_IMAGE_WORKFLOW_IMAGE}" \
   --pvc ai-model-workspace \
   --config-path /workspace/configs/image-A.json \
-  --gpu-count 8 \
+  --gpu-count 7 \
   --mode train \
-  --node-selector-key ai-build-tools.ricolin.dev/accelerator \
-  --node-selector-value nvidia-h200 \
+  --node-selector-key nvidia.com/gpu.product \
+  --node-selector-value NVIDIA-H200 \
   --output evidence/image-release-a-job.json
 
 ./kubernetes/tools/ai-workflow image render-job \
@@ -106,8 +126,8 @@ contains `.cache` with a normalized payload tree.
   --config-path /workspace/configs/generate-A.json \
   --gpu-count 1 \
   --mode generate \
-  --node-selector-key ai-build-tools.ricolin.dev/accelerator \
-  --node-selector-value nvidia-h200 \
+  --node-selector-key nvidia.com/gpu.product \
+  --node-selector-value NVIDIA-H200 \
   --output evidence/image-release-a-gallery-job.json
 ```
 

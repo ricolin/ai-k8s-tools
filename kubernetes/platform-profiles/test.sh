@@ -248,9 +248,12 @@ if [[ $(grep -Fc 'apiVersion: kueue.x-k8s.io/v1beta2' "${workflow_output}") -ne 
   echo 'workflow profile must use Kueue v1beta2 for all Kueue resources' >&2
   exit 1
 fi
-grep -F 'nominalQuota: "8"' "${workflow_output}" >/dev/null
+grep -F 'nominalQuota: "7"' "${workflow_output}" >/dev/null
 grep -F 'nominalQuota: "64"' "${workflow_output}" >/dev/null
 grep -F 'nominalQuota: "512Gi"' "${workflow_output}" >/dev/null
+grep -F 'totalGpuCount: "8"' "${workflow_output}" >/dev/null
+grep -F 'servingGpuReserve: "1"' "${workflow_output}" >/dev/null
+grep -F 'trainingGpuQuota: "7"' "${workflow_output}" >/dev/null
 if [[ $(grep -Fc '        - name: h200' "${workflow_output}") -ne 1 ]]; then
   echo 'workflow ClusterQueue must declare the H200 flavor exactly once' >&2
   exit 1
@@ -304,6 +307,12 @@ if jobset_rules != [
 PY
 if grep -Fq 'ai-build-tools.ricolin.dev/accelerator' "${workflow_output}"; then
   echo 'workflow profile must use the GPU Operator product label' >&2
+  exit 1
+fi
+if helm template ai-workflow-bootstrap \
+  "${root}/kubernetes/addons/ai-workflow-bootstrap" \
+  --set queue.gpuQuota=8 >/dev/null 2>&1; then
+  echo 'workflow profile must reject a quota that consumes serving reserve' >&2
   exit 1
 fi
 
