@@ -570,7 +570,10 @@ def request_model(endpoint: str, payload: dict[str, Any], timeout: int) -> dict[
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        envelope = json.load(response)
+        return json.load(response)
+
+
+def response_from_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     value = json.loads(envelope["choices"][0]["message"]["content"])
     require(isinstance(value, dict), "model response must be an object")
     return value
@@ -582,7 +585,13 @@ def run(release_path: Path, packet_path: Path, output: Path, endpoint: str, fixt
     payload = make_request(release, packet)
     output.mkdir(parents=True, exist_ok=True)
     write_json(output / "request.json", payload)
-    response = load_json(fixture) if fixture else request_model(endpoint, payload, timeout)
+    if fixture:
+        response = load_json(fixture)
+    else:
+        envelope = request_model(endpoint, payload, timeout)
+        write_json(output / "response-envelope.json", envelope)
+        response = response_from_envelope(envelope)
+    write_json(output / "response.unvalidated.json", response)
     validate_response(response, release, packet)
     write_json(output / "response.json", response)
     write_json(

@@ -14,6 +14,7 @@ from ai_build_tools_k8s.code_review_agent import (
     evaluate_green,
     make_request,
     parse_intent,
+    run,
     validate_candidate_fix,
     validate_response,
 )
@@ -155,6 +156,28 @@ def test_response_accepts_grounded_style_finding() -> None:
     value["review"]["findings"][0]["category"] = "style"
 
     assert validate_response(value, release(), packet()) == value
+
+
+def test_run_preserves_invalid_response_before_contract_validation(tmp_path: Path) -> None:
+    release_path = tmp_path / "release.json"
+    packet_path = tmp_path / "packet.json"
+    fixture_path = tmp_path / "fixture.json"
+    output = tmp_path / "output"
+    invalid = response()
+    invalid["review"]["findings"][0]["test"] = ""
+    for path, value in (
+        (release_path, release()),
+        (packet_path, packet()),
+        (fixture_path, invalid),
+    ):
+        path.write_text(json.dumps(value))
+
+    with pytest.raises(ContractError, match="finding test is required"):
+        run(release_path, packet_path, output, "", fixture_path, 10)
+
+    assert json.loads((output / "response.unvalidated.json").read_text()) == invalid
+    assert not (output / "response.json").exists()
+    assert not (output / "run.json").exists()
 
 
 def test_request_distinguishes_finding_and_evidence_ids() -> None:
