@@ -6,6 +6,7 @@ import json
 import re
 import threading
 import urllib.request
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,21 @@ from ai_build_tools_k8s.workflow import (
     sha256_file,
     train_fixture,
 )
-from http.server import ThreadingHTTPServer
+
+
+def test_tree_digest_ignores_downloader_cache(tmp_path: Path) -> None:
+    from ai_build_tools_k8s.workflow import sha256_tree
+
+    (tmp_path / "model.safetensors").write_text("payload\n")
+    expected = sha256_tree(tmp_path)
+    cache = tmp_path / ".cache" / "huggingface" / "download"
+    cache.mkdir(parents=True)
+    (cache / "model.safetensors.metadata").write_text("transient\n")
+
+    assert sha256_tree(tmp_path) == expected
+
+    (tmp_path / "model.safetensors").write_text("changed\n")
+    assert sha256_tree(tmp_path) != expected
 
 
 def namespace(**values):
