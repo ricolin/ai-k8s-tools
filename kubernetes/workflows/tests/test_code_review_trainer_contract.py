@@ -24,6 +24,7 @@ generator = load_module("code_review_dataset", "kubernetes-CUDA/code-review/gene
 quality_gate = load_module("code_review_quality_gate", "kubernetes-CUDA/code-review/quality_gate.py")
 sys.modules["quality_gate"] = quality_gate
 evaluator = load_module("code_review_evaluator", "kubernetes-CUDA/code-review/evaluate_reviewer.py")
+server = load_module("code_review_server", "kubernetes-CUDA/common/serve_text_adapter.py")
 
 trainer_path = ROOT / "kubernetes-CUDA/common/text_adapter_trainer.py"
 trainer_spec = importlib.util.spec_from_file_location("text_adapter_trainer", trainer_path)
@@ -31,6 +32,22 @@ assert trainer_spec is not None and trainer_spec.loader is not None
 trainer = importlib.util.module_from_spec(trainer_spec)
 sys.modules[trainer_spec.name] = trainer
 trainer_spec.loader.exec_module(trainer)
+
+
+@pytest.mark.parametrize("module", [trainer, evaluator, server])
+def test_foundation_digest_ignores_downloader_cache(tmp_path: Path, module) -> None:
+    (tmp_path / "config.json").write_text("payload\n")
+    expected = module.sha256_tree(tmp_path)
+
+    cache = tmp_path / ".cache" / "huggingface" / "download"
+    cache.mkdir(parents=True)
+    (cache / "config.json.metadata").write_text("transient metadata\n")
+    (cache / "config.json.lock").touch()
+
+    assert module.sha256_tree(tmp_path) == expected
+
+    (tmp_path / "config.json").write_text("changed payload\n")
+    assert module.sha256_tree(tmp_path) != expected
 
 
 def test_dataset_copies_distinct_reviewer_identities() -> None:
