@@ -57,10 +57,9 @@ kubernetes-CUDA/code-review/build-trainer-image.sh \
   --push
 ```
 
-The image reuses the domain-neutral trainer and model server already proven by
-the security track. Only the engine is shared. Security datasets, contracts,
-adapters, prompts, evidence, and model names remain under `kubernetes/security`
-and `kubernetes-CUDA/security`.
+The image packages the domain-neutral trainer and model server used by the
+code-review workflow. Code-review datasets, contracts, adapters, prompts,
+evidence, and model names remain under the dedicated code-review paths.
 
 ## Train A, B, And C
 

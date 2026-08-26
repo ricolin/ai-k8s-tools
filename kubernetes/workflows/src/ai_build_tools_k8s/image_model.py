@@ -4,33 +4,38 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from ai_build_tools_k8s.security_research import ContractError, _load_json, _require, _require_sha256
+from ai_build_tools_k8s.contracts import (
+    ContractError,
+    load_json_object,
+    require,
+    require_sha256,
+)
 from ai_build_tools_k8s.workflow import add_control_plane_tolerations, sha256_file, write_json
 
 
 def require_image_digest(value: str, field: str) -> None:
-    _require("@sha256:" in value, f"{field} must be digest-pinned")
-    _require_sha256(f"sha256:{value.rsplit('@sha256:', 1)[1]}", field)
+    require("@sha256:" in value, f"{field} must be digest-pinned")
+    require_sha256(f"sha256:{value.rsplit('@sha256:', 1)[1]}", field)
 
 
 def validate_comparison_prompts(path: Path) -> dict[str, Any]:
-    values = _load_json(path) if path.read_text().lstrip().startswith("{") else None
+    values = load_json_object(path) if path.read_text().lstrip().startswith("{") else None
     if values is not None:
         records = values.get("prompts")
     else:
         import json
 
         records = json.loads(path.read_text())
-    _require(isinstance(records, list) and len(records) >= 3, "at least three comparison prompts are required")
+    require(isinstance(records, list) and len(records) >= 3, "at least three comparison prompts are required")
     ids: set[str] = set()
     for record in records:
         required = {"id", "prompt", "negative_prompt", "seed", "width", "height", "steps", "guidance"}
-        _require(not (required - set(record)), f"comparison prompt is missing {sorted(required - set(record))}")
-        _require(record["id"] not in ids, f"duplicate prompt id: {record['id']}")
+        require(not (required - set(record)), f"comparison prompt is missing {sorted(required - set(record))}")
+        require(record["id"] not in ids, f"duplicate prompt id: {record['id']}")
         ids.add(record["id"])
-        _require(int(record["width"]) == 1024 and int(record["height"]) == 1024, "comparison prompts must be 1024x1024")
-        _require(isinstance(record["prompt"], str) and record["prompt"], "comparison prompt is empty")
-        _require(isinstance(record["negative_prompt"], str), "negative prompt must be text")
+        require(int(record["width"]) == 1024 and int(record["height"]) == 1024, "comparison prompts must be 1024x1024")
+        require(isinstance(record["prompt"], str) and record["prompt"], "comparison prompt is empty")
+        require(isinstance(record["negative_prompt"], str), "negative prompt must be text")
     return {
         "schema_version": "1.0.0",
         "status": "PASS",
@@ -65,16 +70,16 @@ def render_image_job(
     tolerate_control_plane: bool = False,
     queue_name: str = "",
 ) -> dict[str, Any]:
-    _require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
+    require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
     if image_pull_policy == "Never":
-        _require(":" in image and "@" not in image, "node-local image must use an explicit tag")
-        _require_sha256(node_local_image_id, "node_local_image_id")
+        require(":" in image and "@" not in image, "node-local image must use an explicit tag")
+        require_sha256(node_local_image_id, "node_local_image_id")
     else:
         require_image_digest(image, "image")
-        _require(not node_local_image_id, "node_local_image_id is only valid with imagePullPolicy Never")
-    _require(mode in {"train", "generate"}, "unsupported image job mode")
-    _require(gpu_count >= 1, "gpu_count must be positive")
-    _require(config_path.startswith("/workspace/"), "config must be on the workspace PVC")
+        require(not node_local_image_id, "node_local_image_id is only valid with imagePullPolicy Never")
+    require(mode in {"train", "generate"}, "unsupported image job mode")
+    require(gpu_count >= 1, "gpu_count must be positive")
+    require(config_path.startswith("/workspace/"), "config must be on the workspace PVC")
     script = "train_stage.py" if mode == "train" else "generate_comparison.py"
     pod_spec: dict[str, Any] = {
         "restartPolicy": "Never",
@@ -151,17 +156,17 @@ def render_image_trainjob(
     node_local_image_id: str = "",
     tolerate_control_plane: bool = False,
 ) -> dict[str, Any]:
-    _require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
+    require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
     if image_pull_policy == "Never":
-        _require(":" in image and "@" not in image, "node-local image must use an explicit tag")
-        _require_sha256(node_local_image_id, "node_local_image_id")
+        require(":" in image and "@" not in image, "node-local image must use an explicit tag")
+        require_sha256(node_local_image_id, "node_local_image_id")
     else:
         require_image_digest(image, "image")
-        _require(not node_local_image_id, "node_local_image_id is only valid with imagePullPolicy Never")
-    _require(gpu_count >= 1, "gpu_count must be positive")
-    _require(config_path.startswith("/workspace/"), "config must be on the workspace PVC")
-    _require(queue_name, "queue_name is required")
-    _require(runtime_name, "runtime_name is required")
+        require(not node_local_image_id, "node_local_image_id is only valid with imagePullPolicy Never")
+    require(gpu_count >= 1, "gpu_count must be positive")
+    require(config_path.startswith("/workspace/"), "config must be on the workspace PVC")
+    require(queue_name, "queue_name is required")
+    require(runtime_name, "runtime_name is required")
 
     pod_patch: dict[str, Any] = {
         "securityContext": {
@@ -256,7 +261,7 @@ def create_release_manifest(
     evaluation_digest: str,
     validation_level: str,
 ) -> dict[str, Any]:
-    _require(
+    require(
         name in {
             "release-a-watercolor",
             "release-b-watercolor-detail",
@@ -270,21 +275,21 @@ def create_release_manifest(
         ("prompt_digest", prompt_digest),
         ("evaluation_digest", evaluation_digest),
     ):
-        _require_sha256(value, field)
-    _require(validation_level in {"AUTOMATED_ACCEPTED", "AI_BLIND_REVIEWED"}, "invalid validation level")
+        require_sha256(value, field)
+    require(validation_level in {"AUTOMATED_ACCEPTED", "AI_BLIND_REVIEWED"}, "invalid validation level")
     expected_adapters = {
         "release-a-watercolor": ["watercolor"],
         "release-b-watercolor-detail": ["watercolor", "detail"],
         "release-b-watercolor-impressionism": ["watercolor", "impressionism"],
         "release-c-watercolor-complex": ["c-watercolor", "c-complex-detail"],
     }
-    _require(
+    require(
         [record.get("name") for record in adapter_records] == expected_adapters[name],
         "release adapter composition or order is invalid",
     )
     for adapter in adapter_records:
-        _require(adapter.get("name") and isinstance(adapter.get("scale"), (int, float)), "invalid adapter record")
-        _require_sha256(str(adapter.get("digest", "")), "adapter digest")
+        require(adapter.get("name") and isinstance(adapter.get("scale"), (int, float)), "invalid adapter record")
+        require_sha256(str(adapter.get("digest", "")), "adapter digest")
     return {
         "schema_version": "1.0.0",
         "release_name": name,

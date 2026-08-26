@@ -1,7 +1,7 @@
 [project]
 name = "ai-k8s-tools-workflows"
 version = "0.1.0"
-description = "Reusable Kubeflow, KServe, CUDA, and security workflow components for ai-k8s-tools"
+description = "Reusable Kubeflow, KServe, CUDA, image, and code-review workflow components for ai-k8s-tools"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "boto3==1.40.21",
@@ -19,9 +19,6 @@ dev = [
 [project.scripts]
 ai-k8s-workflow = "ai_build_tools_k8s.workflow:main"
 ai-k8s-serve = "ai_build_tools_k8s.server:main"
-ai-security-research = "ai_build_tools_k8s.security_research:main"
-ai-security-agent = "ai_build_tools_k8s.security_agent:main"
-ai-security-model = "ai_build_tools_k8s.security_model:main"
 ai-image-model = "ai_build_tools_k8s.image_model:main"
 ai-image-workload = "ai_build_tools_k8s.image_workload:main"
 ai-image-pipeline = "ai_build_tools_k8s.image_pipeline:main"

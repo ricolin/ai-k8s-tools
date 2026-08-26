@@ -20,21 +20,16 @@ cd "${workflow_root}"
 
 show_help() {
   cat <<'EOF'
-usage: ai-workflow {capabilities|agent|model|image|image-pipeline|research|code-review|code-review-pipeline|code-agent|code-sandbox|RESEARCH_COMMAND} ...
+usage: ai-workflow {capabilities|image|image-pipeline|code-review|code-review-pipeline|code-agent|code-sandbox} ...
 
 Command groups:
   capabilities       Print implemented contract capabilities.
-  agent              Validate a released adviser and a grounded typed plan.
-  model              Validate datasets/releases and render training/serving.
   image              Validate image prompts and render CUDA workloads.
   image-pipeline     Compile or submit the KFP-owned image A/B/gallery pipeline.
-  research           Lock source/runtime evidence and render private reports.
   code-review        Validate code-review data/releases and render training/serving.
   code-review-pipeline Compile or submit the KFP-owned code-review A/B/C pipeline.
   code-agent         Generate and validate grounded review, fix, and test plans.
   code-sandbox       Render isolated fetch, patch, unit-test, and patch-export Jobs.
-  RESEARCH_COMMAND   Compatibility shortcut for a research subcommand.
-
 Run "ai-workflow <group> --help" for group-specific commands.
 EOF
 }
@@ -45,13 +40,8 @@ case "${command_name}" in
     show_help
     ;;
   capabilities)
-    "${uv_bin}" run --frozen ai-security-research capabilities
     printf '%s\n' \
-      security-adviser-client-v1 \
-      security-agent-plan-policy-v1 \
-      security-model-dataset-contract-v1 \
-      security-model-training-job-v1 \
-      security-model-kserve-vllm-v1 \
+      image-model-ab-v1 \
       code-review-model-abc-v1 \
       code-review-agent-patch-v1 \
       code-review-sandbox-v1 \
@@ -60,14 +50,6 @@ case "${command_name}" in
       reserved-serving-capacity-v1 \
       promotion-lifecycle-v1
     ;;
-  agent)
-    shift
-    exec "${uv_bin}" run --frozen ai-security-agent "$@"
-    ;;
-  model)
-    shift
-    exec "${uv_bin}" run --frozen ai-security-model "$@"
-    ;;
   image)
     shift
     exec "${uv_bin}" run --frozen ai-image-model "$@"
@@ -75,10 +57,6 @@ case "${command_name}" in
   image-pipeline)
     shift
     exec "${uv_bin}" run --frozen ai-image-pipeline "$@"
-    ;;
-  research)
-    shift
-    exec "${uv_bin}" run --frozen ai-security-research "$@"
     ;;
   code-review)
     shift
@@ -101,8 +79,7 @@ case "${command_name}" in
     exit 2
     ;;
   *)
-    # Keep the original analysis-only commands directly addressable for the
-    # command-first research runbooks.
-    exec "${uv_bin}" run --frozen ai-security-research "$@"
+    show_help >&2
+    exit 2
     ;;
 esac

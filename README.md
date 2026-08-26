@@ -1,9 +1,8 @@
 # AI Kubernetes Tools
 
-Public, reusable Kubernetes AI workflow tooling. It keeps
-Kubeflow, KServe, CUDA, H200, model-training, serving, and bounded security
-research work separate from the standalone bare-metal workflow in
-`ricolin/ai-build-tools`.
+Public, reusable Kubernetes AI workflow tooling. It keeps Kubeflow, KServe,
+CUDA, H200, model-training, serving, code-review, and image-model work separate
+from the standalone bare-metal workflow in `ricolin/ai-build-tools`.
 
 ## Scope
 
@@ -16,10 +15,7 @@ research work separate from the standalone bare-metal workflow in
   for Bash, Python, Go, Rust, and YAML;
 - a sandboxed repository and pull-request agent that can test and export a
   candidate `fix.patch` without pushing or publishing it;
-- retained Qwen security-adviser A/B/C and research resources in separate
-  `security` paths;
-- an analysis-only security agent and public-source/runtime research sandbox;
-- immutable evidence, dataset, source, release, and reports-only gates; and
+- immutable evidence, dataset, source, and release gates;
 - explicit `TRAINING_COMPLETE`, `WORKFLOW_VALIDATED`, `QUALITY_REJECTED`,
   `SERVING_CANARY`, and `PRODUCTION_APPROVED` lifecycle enforcement; and
 - local fixture validation that does not claim physical GPU proof.
@@ -48,13 +44,11 @@ Start with:
 - [Kubernetes workflow](docs/kubernetes-workflow.md)
 - [Code-review model workflow](docs/code-review-workflow.md)
 - [Code-review patch-and-test agent](docs/code-review-agent-workflow.md)
-- [Grounded security-agent workflow](docs/security-agent-workflow.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Kubernetes tools](kubernetes/README.md)
 - [CUDA and H200 validation](kubernetes-CUDA/README.md)
 - [NVIDIA-ready cluster lifecycle](docs/nvidia-ai-ready-cluster.md)
 - [SDXL CUDA backend](kubernetes-CUDA/image/README.md)
-- [Security adviser CUDA backend](kubernetes-CUDA/security/README.md)
 
 ## Local validation
 
@@ -69,16 +63,11 @@ bash -n \
   kubernetes/platform/*.sh \
   kubernetes-CUDA/image/*.sh \
   kubernetes-CUDA/code-review/*.sh \
-  kubernetes-CUDA/security/*.sh \
   scripts/*.sh
 
 python3 -m py_compile \
   kubernetes-CUDA/image/*.py \
-  kubernetes-CUDA/code-review/*.py \
-  kubernetes-CUDA/security/*.py
-
-./kubernetes/tools/verify-security-research-implementation.sh \
-  /tmp/ai-k8s-tools-local-evidence
+  kubernetes-CUDA/code-review/*.py
 
 ./kubernetes/addons/nvidia-ai-readiness/test-render.sh
 ./kubernetes/bundles/workspace/test-render.sh
@@ -86,15 +75,9 @@ python3 -m py_compile \
 ./kubernetes/platform-profiles/test.sh
 ```
 
-The final verifier proves local contracts and a synthetic fixture only. It
-does not prove CUDA, H200 performance, model training quality, KServe on a
-live cluster, or production readiness.
-
-For each command's acceptance condition and failure boundary, follow the
-[security-agent workflow](docs/security-agent-workflow.md). Scanner execution
-and KServe lifecycle are operator integrations; this repository validates the
-evidence and release contracts and does not silently grant authority to scan a
-target.
+Local validation proves repository contracts only. It does not prove CUDA,
+H200 performance, model training quality, KServe on a live cluster, or
+production readiness.
 
 ## Repository split
 

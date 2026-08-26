@@ -12,7 +12,7 @@ from ai_build_tools_k8s.image_model import (
     render_image_job,
     render_image_trainjob,
 )
-from ai_build_tools_k8s.security_research import _require_sha256
+from ai_build_tools_k8s.contracts import require_sha256
 from ai_build_tools_k8s.workflow import sha256_file, write_json
 
 
@@ -29,7 +29,7 @@ def load_json_object(path: Path, description: str) -> dict[str, Any]:
 def _require_digest(value: Any, field: str) -> str:
     if not isinstance(value, str):
         raise ContractError(f"{field} is required")
-    _require_sha256(value, field)
+    require_sha256(value, field)
     return value
 
 

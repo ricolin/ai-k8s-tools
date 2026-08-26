@@ -55,11 +55,7 @@ storage, workspace, and workflow-bootstrap boundaries; use
 `kubernetes/platform-profiles/verify.sh` for non-mutating workload-side
 acceptance.
 
-The released-adviser and reports-only agent path is documented in
-[the grounded security-agent guide](../docs/security-agent-workflow.md), with
-failure recovery in [troubleshooting](../docs/troubleshooting.md).
-
-The code-review track is separate from that retained security workflow:
+The code-review track contains:
 
 - `kubernetes/code-review` contains portable review, release, agent, and
   sandbox contracts;
