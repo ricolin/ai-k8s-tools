@@ -144,6 +144,8 @@ def evaluate(config_path: Path) -> None:
                 "response": response,
                 "response_normalizations": list(normalizations),
             }
+            if "expected_finding" in prompt:
+                record["expected_finding"] = prompt["expected_finding"]
             if normalizations:
                 record["raw_response_sha256"] = (
                     f"sha256:{hashlib.sha256(raw_response.encode()).hexdigest()}"

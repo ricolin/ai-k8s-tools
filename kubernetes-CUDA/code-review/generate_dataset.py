@@ -19,7 +19,7 @@ LANGUAGE_CASES = (
         "impact": "The mutable default is shared across calls and leaks state between independent requests.",
         "recommendation": "Use None as the default and allocate a new list inside the function.",
         "test": "Call append twice without values and assert each result starts from an empty list.",
-        "patch": "diff --git a/src/cache.py b/src/cache.py\n--- a/src/cache.py\n+++ b/src/cache.py\n@@ -18,2 +18,4 @@\n-def append(value, values=[]):\n+def append(value, values=None):\n+    if values is None:\n+        values = []\n",
+        "patch": "diff --git a/src/cache.py b/src/cache.py\n--- a/src/cache.py\n+++ b/src/cache.py\n@@ -18 +18,3 @@\n-def append(value, values=[]):\n+def append(value, values=None):\n+    if values is None:\n+        values = []\n",
     },
     {
         "language": "go",
@@ -68,6 +68,225 @@ LANGUAGE_CASES = (
         "recommendation": "Pin the action to a reviewed immutable commit SHA and retain the release tag in a comment.",
         "test": "Validate that every uses entry is pinned to a full commit SHA.",
         "patch": "diff --git a/.github/workflows/test.yaml b/.github/workflows/test.yaml\n--- a/.github/workflows/test.yaml\n+++ b/.github/workflows/test.yaml\n@@ -21,1 +21,1 @@\n-      uses: vendor/action@main\n+      uses: vendor/action@0123456789abcdef0123456789abcdef01234567 # v1\n",
+    },
+    {
+        "language": "python",
+        "path": "tests/test_client.py",
+        "line": 14,
+        "category": "testing",
+        "severity": "low",
+        "snippet": "def test_lookup_with_vaild_id(self):",
+        "impact": "Name-based selection for the correctly spelled valid-id case can silently skip this test.",
+        "recommendation": "Rename the test method so valid is spelled correctly.",
+        "test": "Collect the module and assert the correctly spelled valid-id test name is present.",
+        "patch": "diff --git a/tests/test_client.py b/tests/test_client.py\n--- a/tests/test_client.py\n+++ b/tests/test_client.py\n@@ -14 +14 @@\n-    def test_lookup_with_vaild_id(self):\n+    def test_lookup_with_valid_id(self):\n",
+    },
+    {
+        "language": "go",
+        "path": "storage/loader.go",
+        "line": 27,
+        "category": "reliability",
+        "severity": "high",
+        "snippet": "data, _ := os.ReadFile(path)",
+        "impact": "A read failure is discarded and the caller loses the underlying error.",
+        "recommendation": "Return the read error before using the data.",
+        "test": "Read a missing path and assert the original filesystem error is returned.",
+        "patch": "diff --git a/storage/loader.go b/storage/loader.go\n--- a/storage/loader.go\n+++ b/storage/loader.go\n@@ -27 +27,4 @@\n-data, _ := os.ReadFile(path)\n+data, err := os.ReadFile(path)\n+if err != nil {\n+    return nil, err\n+}\n",
+    },
+    {
+        "language": "rust",
+        "path": "src/config.rs",
+        "line": 31,
+        "category": "reliability",
+        "severity": "high",
+        "snippet": "let config = serde_json::from_str(input).unwrap();",
+        "impact": "Invalid configuration input panics the process instead of returning an error.",
+        "recommendation": "Propagate the deserialization error through the function result.",
+        "test": "Pass invalid JSON and assert an error is returned without a panic.",
+        "patch": "diff --git a/src/config.rs b/src/config.rs\n--- a/src/config.rs\n+++ b/src/config.rs\n@@ -31 +31 @@\n-let config = serde_json::from_str(input).unwrap();\n+let config = serde_json::from_str(input)?;\n",
+    },
+    {
+        "language": "rust",
+        "path": "src/queue.rs",
+        "line": 88,
+        "category": "correctness",
+        "severity": "high",
+        "snippet": "let first = items[0].clone();",
+        "impact": "An empty queue causes an index-out-of-bounds panic instead of the documented error.",
+        "recommendation": "Use first and convert the missing element into the function error.",
+        "test": "Call the function with an empty queue and assert EmptyQueue is returned.",
+        "patch": "diff --git a/src/queue.rs b/src/queue.rs\n--- a/src/queue.rs\n+++ b/src/queue.rs\n@@ -88 +88 @@\n-let first = items[0].clone();\n+let first = items.first().ok_or(QueueError::EmptyQueue)?.clone();\n",
+    },
+    {
+        "language": "bash",
+        "path": "scripts/copy-artifact.sh",
+        "line": 12,
+        "category": "correctness",
+        "severity": "high",
+        "snippet": "cp $source $target",
+        "impact": "Word splitting and pathname expansion can change both path arguments.",
+        "recommendation": "Quote both expansions and terminate option parsing.",
+        "test": "Copy between paths containing spaces and leading dashes and verify the exact destination.",
+        "patch": "diff --git a/scripts/copy-artifact.sh b/scripts/copy-artifact.sh\n--- a/scripts/copy-artifact.sh\n+++ b/scripts/copy-artifact.sh\n@@ -12 +12 @@\n-cp $source $target\n+cp -- \"$source\" \"$target\"\n",
+    },
+    {
+        "language": "bash",
+        "path": "ci/build.sh",
+        "line": 6,
+        "category": "reliability",
+        "severity": "high",
+        "snippet": "build | tee \"$log\"",
+        "impact": "Without pipefail, a failed build can be masked by a successful tee process.",
+        "recommendation": "Enable pipefail before the logging pipeline.",
+        "test": "Make build exit nonzero and assert the script also exits nonzero while retaining its log.",
+        "patch": "diff --git a/ci/build.sh b/ci/build.sh\n--- a/ci/build.sh\n+++ b/ci/build.sh\n@@ -6 +6,2 @@\n+set -o pipefail\n build | tee \"$log\"\n",
+    },
+    {
+        "language": "bash",
+        "path": "scripts/render.sh",
+        "line": 19,
+        "category": "reliability",
+        "severity": "medium",
+        "snippet": "tmp=$(mktemp); generate > \"$tmp\"",
+        "impact": "The temporary file remains after failures or signals and can expose generated content.",
+        "recommendation": "Install an exit trap immediately after creating the temporary file.",
+        "test": "Interrupt generate and assert the temporary file is removed.",
+        "patch": "diff --git a/scripts/render.sh b/scripts/render.sh\n--- a/scripts/render.sh\n+++ b/scripts/render.sh\n@@ -19 +19,2 @@\n-tmp=$(mktemp); generate > \"$tmp\"\n+tmp=$(mktemp)\n+trap 'rm -f -- \"$tmp\"' EXIT; generate > \"$tmp\"\n",
+    },
+    {
+        "language": "bash",
+        "path": "scripts/clean.sh",
+        "line": 22,
+        "category": "security",
+        "severity": "critical",
+        "snippet": "rm -rf $workdir/*",
+        "impact": "An empty or split workdir value can make recursive deletion target unintended paths.",
+        "recommendation": "Require a nonempty workdir and quote the directory portion.",
+        "test": "Run with an empty workdir and assert the script fails before invoking rm.",
+        "patch": "diff --git a/scripts/clean.sh b/scripts/clean.sh\n--- a/scripts/clean.sh\n+++ b/scripts/clean.sh\n@@ -22 +22 @@\n-rm -rf $workdir/*\n+rm -rf -- \"${workdir:?workdir is required}\"/*\n",
+    },
+    {
+        "language": "bash",
+        "path": "scripts/deploy.sh",
+        "line": 17,
+        "category": "correctness",
+        "severity": "high",
+        "snippet": "args=\"$@\"; deploy $args",
+        "impact": "Flattening positional arguments loses their original boundaries and changes quoted values.",
+        "recommendation": "Forward the positional argument array directly with quoted at expansion.",
+        "test": "Pass an argument containing whitespace and assert deploy receives it as one argument.",
+        "patch": "diff --git a/scripts/deploy.sh b/scripts/deploy.sh\n--- a/scripts/deploy.sh\n+++ b/scripts/deploy.sh\n@@ -17 +17 @@\n-args=\"$@\"; deploy $args\n+deploy \"$@\"\n",
+    },
+    {
+        "language": "yaml",
+        "path": "deploy/app.yaml",
+        "line": 34,
+        "category": "reliability",
+        "severity": "high",
+        "snippet": "image: registry.example/app:latest",
+        "impact": "The mutable tag can resolve to different bytes across otherwise identical deployments.",
+        "recommendation": "Pin the image to the reviewed immutable manifest digest.",
+        "test": "Validate that the deployment image contains a sha256 digest reference.",
+        "patch": "diff --git a/deploy/app.yaml b/deploy/app.yaml\n--- a/deploy/app.yaml\n+++ b/deploy/app.yaml\n@@ -34 +34 @@\n-        image: registry.example/app:latest\n+        image: registry.example/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+    },
+    {
+        "language": "yaml",
+        "path": ".github/workflows/release.yml",
+        "line": 29,
+        "category": "security",
+        "severity": "high",
+        "snippet": "uses: other/build@v3",
+        "impact": "A mutable release tag allows third-party action code to change without review.",
+        "recommendation": "Pin the action to a reviewed full commit SHA and keep the tag in a comment.",
+        "test": "Validate that every external action reference uses a full commit SHA.",
+        "patch": "diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml\n--- a/.github/workflows/release.yml\n+++ b/.github/workflows/release.yml\n@@ -29 +29 @@\n-      uses: other/build@v3\n+      uses: other/build@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb # v3\n",
+    },
+    {
+        "language": "yaml",
+        "path": ".github/workflows/check.yml",
+        "line": 7,
+        "category": "security",
+        "severity": "high",
+        "snippet": "permissions: write-all",
+        "impact": "Every job receives broad write access, increasing the impact of compromised code.",
+        "recommendation": "Default the token to read-only contents access and grant narrower job permissions.",
+        "test": "Validate that workflow-level permissions do not use write-all.",
+        "patch": "diff --git a/.github/workflows/check.yml b/.github/workflows/check.yml\n--- a/.github/workflows/check.yml\n+++ b/.github/workflows/check.yml\n@@ -7 +7,2 @@\n-permissions: write-all\n+permissions:\n+  contents: read\n",
+    },
+)
+
+HELDOUT_CASES = (
+    {
+        "language": "python",
+        "path": "lib/collector.py",
+        "line": 44,
+        "category": "correctness",
+        "severity": "high",
+        "snippet": "def collect(item, bucket={}): bucket[item.id] = item; return bucket",
+        "impact": "The mutable dictionary is shared across calls and leaks entries between collections.",
+        "recommendation": "Use None as the default and create a dictionary inside the function.",
+        "test": "Call collect twice and assert the second result contains no first-call entry.",
+        "patch": "diff --git a/lib/collector.py b/lib/collector.py\n--- a/lib/collector.py\n+++ b/lib/collector.py\n@@ -44 +44,3 @@\n-def collect(item, bucket={}): bucket[item.id] = item; return bucket\n+def collect(item, bucket=None):\n+    bucket = {} if bucket is None else bucket\n+    bucket[item.id] = item; return bucket\n",
+    },
+    {
+        "language": "go",
+        "path": "client/fetch.go",
+        "line": 52,
+        "category": "correctness",
+        "severity": "high",
+        "snippet": "response, err := client.Do(request); defer response.Body.Close(); if err != nil { return err }",
+        "impact": "A request error leaves response nil, so accessing Body before checking err can panic.",
+        "recommendation": "Check the error before deferring response body cleanup.",
+        "test": "Return a nil response with an error and assert the error is returned without panic.",
+        "patch": "diff --git a/client/fetch.go b/client/fetch.go\n--- a/client/fetch.go\n+++ b/client/fetch.go\n@@ -52 +52,2 @@\n-response, err := client.Do(request); defer response.Body.Close(); if err != nil { return err }\n+response, err := client.Do(request); if err != nil { return err }\n+defer response.Body.Close()\n",
+    },
+    {
+        "language": "rust",
+        "path": "src/listener.rs",
+        "line": 25,
+        "category": "reliability",
+        "severity": "high",
+        "snippet": "let port: u16 = value.parse().expect(\"valid port\");",
+        "impact": "Invalid external configuration panics startup instead of returning a configuration error.",
+        "recommendation": "Map and propagate the parse error through the configuration result.",
+        "test": "Supply a nonnumeric port and assert startup returns the documented error.",
+        "patch": "diff --git a/src/listener.rs b/src/listener.rs\n--- a/src/listener.rs\n+++ b/src/listener.rs\n@@ -25 +25 @@\n-let port: u16 = value.parse().expect(\"valid port\");\n+let port: u16 = value.parse().map_err(ConfigError::InvalidPort)?;\n",
+    },
+    {
+        "language": "bash",
+        "path": "tools/push-release.sh",
+        "line": 11,
+        "category": "correctness",
+        "severity": "high",
+        "snippet": "archive=$(ls *.tar); upload $archive",
+        "impact": "Parsing ls output and unquoted expansion corrupt whitespace and wildcard-containing names.",
+        "recommendation": "Iterate over pathname expansion directly and quote each archive.",
+        "test": "Create archives with spaces and assert each exact pathname is uploaded once.",
+        "patch": "diff --git a/tools/push-release.sh b/tools/push-release.sh\n--- a/tools/push-release.sh\n+++ b/tools/push-release.sh\n@@ -11 +11,3 @@\n-archive=$(ls *.tar); upload $archive\n+for archive in ./*.tar; do\n+  upload \"$archive\"\n+done\n",
+    },
+    {
+        "language": "yaml",
+        "path": ".github/workflows/package.yml",
+        "line": 18,
+        "category": "security",
+        "severity": "high",
+        "snippet": "uses: example/package@v4",
+        "impact": "The mutable tag can execute different third-party code without a reviewed change.",
+        "recommendation": "Pin the action to its reviewed full commit SHA and retain v4 in a comment.",
+        "test": "Validate that every third-party uses reference is pinned to a full commit SHA.",
+        "patch": "diff --git a/.github/workflows/package.yml b/.github/workflows/package.yml\n--- a/.github/workflows/package.yml\n+++ b/.github/workflows/package.yml\n@@ -18 +18 @@\n-      uses: example/package@v4\n+      uses: example/package@cccccccccccccccccccccccccccccccccccccccc # v4\n",
+    },
+    {
+        "language": "python",
+        "path": "tests/test_loader.py",
+        "line": 39,
+        "category": "testing",
+        "severity": "low",
+        "snippet": "def test_load_with_sucess(self):",
+        "impact": "Correctly spelled name filters can silently skip the success-path test.",
+        "recommendation": "Rename the test method so success is spelled correctly.",
+        "test": "Collect the module and assert the correctly spelled success-path test is present.",
+        "patch": "diff --git a/tests/test_loader.py b/tests/test_loader.py\n--- a/tests/test_loader.py\n+++ b/tests/test_loader.py\n@@ -39 +39 @@\n-    def test_load_with_sucess(self):\n+    def test_load_with_success(self):\n",
     },
 )
 
@@ -315,7 +534,11 @@ def record(stage: str, index: int) -> dict[str, Any]:
         pr_lock = f"pr-{stage.lower()}-{index:04d}"
     profile = f"{case['language']}-unit"
     identity = reviewer_identity(stage, index)
-    resolved = stage == "C" and split == "train" and index % 4 == 3
+    resolved = (
+        stage == "C"
+        and split == "train"
+        and (index // len(LANGUAGE_CASES)) % 5 == 4
+    )
     target = {"A": "single-file", "B": "pull-request", "C": "agent-plan"}[stage]
     user = request_payload(
         identity,
@@ -389,18 +612,22 @@ def generate(output: Path, counts: dict[str, int]) -> dict[str, Any]:
     return manifest
 
 
-def comparison_prompts() -> list[dict[str, Any]]:
+def comparison_prompts(
+    cases: tuple[dict[str, Any], ...] = LANGUAGE_CASES,
+    agent_case_index: int = 0,
+    include_expectations: bool = False,
+) -> list[dict[str, Any]]:
     specs = [
         ("python-review", 0, "1", "repo-python", None, "python-unit", "python-diff"),
         ("go-review", 1, "2", "repo-go", None, "go-unit", "go-diff"),
         ("rust-review", 2, "3", "repo-rust", None, "rust-unit", "rust-diff"),
         ("bash-review", 3, "4", "repo-bash", None, "bash-unit", "bash-diff"),
         ("yaml-review", 4, "5", "repo-yaml", None, "yaml-unit", "yaml-diff"),
-        ("pr-agent-fix", 0, "6", "repo-agent", "pr-agent", "python-unit", "agent-diff"),
+        ("pr-agent-fix", agent_case_index, "6", "repo-agent", "pr-agent", "python-unit", "agent-diff"),
     ]
     prompts = []
     for prompt_id, case_index, digit, repository, pr_lock, profile, evidence in specs:
-        case = LANGUAGE_CASES[case_index]
+        case = cases[case_index]
         identity = "sha256:" + (digit * 64)
         instruction = "Review the supplied evidence and return the exact JSON contract."
         if prompt_id == "pr-agent-fix":
@@ -414,8 +641,7 @@ def comparison_prompts() -> list[dict[str, Any]]:
             {"path": case["path"], "line": case["line"], "snippet": case["snippet"]},
             instruction,
         )
-        prompts.append(
-            {
+        prompt = {
                 "id": prompt_id,
                 "expected_reviewer_identity": identity,
                 "messages": [
@@ -423,8 +649,22 @@ def comparison_prompts() -> list[dict[str, Any]]:
                     {"role": "user", "content": canonical_json(payload).decode()},
                 ],
             }
-        )
+        if include_expectations:
+            prompt["expected_finding"] = {
+                "path": case["path"],
+                "line": case["line"],
+                "evidence": evidence,
+            }
+        prompts.append(prompt)
     return prompts
+
+
+def heldout_comparison_prompts() -> list[dict[str, Any]]:
+    return comparison_prompts(
+        HELDOUT_CASES,
+        agent_case_index=5,
+        include_expectations=True,
+    )
 
 
 def main() -> None:
@@ -434,6 +674,7 @@ def main() -> None:
     parser.add_argument("--stage-b-count", type=int, default=224)
     parser.add_argument("--stage-c-count", type=int, default=384)
     parser.add_argument("--comparison-output", default="")
+    parser.add_argument("--heldout-comparison-output", default="")
     args = parser.parse_args()
     counts = {"A": args.stage_a_count, "B": args.stage_b_count, "C": args.stage_c_count}
     if any(value < 20 for value in counts.values()):
@@ -441,6 +682,10 @@ def main() -> None:
     manifest = generate(Path(args.output), counts)
     if args.comparison_output:
         Path(args.comparison_output).write_text(json.dumps(comparison_prompts(), indent=2, sort_keys=True) + "\n")
+    if args.heldout_comparison_output:
+        Path(args.heldout_comparison_output).write_text(
+            json.dumps(heldout_comparison_prompts(), indent=2, sort_keys=True) + "\n"
+        )
     print(json.dumps(manifest, indent=2, sort_keys=True))
 
 

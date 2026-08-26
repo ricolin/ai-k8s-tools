@@ -66,6 +66,44 @@ LANGUAGE_SUFFIXES = {
     "rust": {".rs"},
     "yaml": {".yaml", ".yml"},
 }
+HUNK_HEADER = re.compile(
+    r"^@@ -(?:[0-9]+)(?:,([0-9]+))? \+(?:[0-9]+)(?:,([0-9]+))? @@(?: .*)?$"
+)
+
+
+def unified_diff_hunks_are_valid(patch: str) -> bool:
+    lines = patch.splitlines()
+    found_hunk = False
+    index = 0
+    while index < len(lines):
+        match = HUNK_HEADER.fullmatch(lines[index])
+        if match is None:
+            index += 1
+            continue
+        found_hunk = True
+        expected_old = int(match.group(1) or "1")
+        expected_new = int(match.group(2) or "1")
+        observed_old = 0
+        observed_new = 0
+        index += 1
+        while index < len(lines) and not lines[index].startswith(("@@ ", "diff --git ")):
+            line = lines[index]
+            if line.startswith("\\ No newline at end of file"):
+                index += 1
+                continue
+            if line.startswith(" "):
+                observed_old += 1
+                observed_new += 1
+            elif line.startswith("-"):
+                observed_old += 1
+            elif line.startswith("+"):
+                observed_new += 1
+            else:
+                return False
+            index += 1
+        if observed_old != expected_old or observed_new != expected_new:
+            return False
+    return found_hunk
 
 
 def validate_packet(packet: dict[str, Any]) -> dict[str, set[str]]:
@@ -153,6 +191,7 @@ def validate_candidate_fix(fix: dict[str, Any]) -> dict[str, Any]:
             require(not Path(value).is_absolute(), "patch path must be relative")
             require(".." not in parts and ".git" not in parts, "patch path escapes the source tree")
         require(before == after, "rename patches are not supported by the automated fixer")
+    require(unified_diff_hunks_are_valid(patch), "candidate patch hunk line counts do not match headers")
     return fix
 
 
@@ -527,7 +566,10 @@ def make_request(release: dict[str, Any], packet: dict[str, Any]) -> dict[str, A
         "patch only in a disposable sandbox, runs operator-owned unit-test profiles without test-stage egress, and exports "
         "the resulting patch and report without modifying the upstream checkout. Every task cleanup_required must be true. "
         "pull_request_lock_id must be null when no pull-request lock is supplied. A proposed unified_diff must begin with "
-        "diff --git, contain --- and +++ headers, and end with a newline. Encode newlines inside JSON strings and keep "
+        "diff --git, contain --- and +++ headers, use hunk counts that exactly match the hunk body, and end with a "
+        "newline. When source evidence directly shows a defect and no applied patch plus passing selected-profile "
+        "result is supplied, report the finding; missing test results alone do not justify APPROVE. Encode newlines "
+        "inside JSON strings and keep "
         "review.tests, review.unknowns, and candidate_fix.expected_tests as arrays of strings."
     )
     user = {

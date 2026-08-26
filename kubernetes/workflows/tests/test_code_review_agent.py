@@ -341,6 +341,14 @@ def test_candidate_fix_rejects_missing_terminal_newline() -> None:
         validate_candidate_fix(invalid)
 
 
+def test_candidate_fix_rejects_mismatched_hunk_line_counts() -> None:
+    invalid = response()["candidate_fix"]
+    invalid["unified_diff"] = invalid["unified_diff"].replace("@@ -1 +1 @@", "@@ -1,2 +1,2 @@")
+
+    with pytest.raises(ContractError, match="hunk line counts"):
+        validate_candidate_fix(invalid)
+
+
 @pytest.mark.parametrize("field", ["tests", "unknowns"])
 def test_response_rejects_invalid_review_list_items(field: str) -> None:
     invalid = response()

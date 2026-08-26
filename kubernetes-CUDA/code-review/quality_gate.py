@@ -31,6 +31,45 @@ TOOL_ARGUMENT_KEYS = {
     "export_patch": {"patch_id", "repository_lock_id"},
     "draft_review": {"evidence_ids"},
 }
+HUNK_HEADER = re.compile(
+    r"^@@ -(?:[0-9]+)(?:,([0-9]+))? \+(?:[0-9]+)(?:,([0-9]+))? @@(?: .*)?$"
+)
+
+
+def unified_diff_hunks_are_valid(patch: str) -> bool:
+    """Validate every unified-diff hunk body against its declared line counts."""
+    lines = patch.splitlines()
+    found_hunk = False
+    index = 0
+    while index < len(lines):
+        match = HUNK_HEADER.fullmatch(lines[index])
+        if match is None:
+            index += 1
+            continue
+        found_hunk = True
+        expected_old = int(match.group(1) or "1")
+        expected_new = int(match.group(2) or "1")
+        observed_old = 0
+        observed_new = 0
+        index += 1
+        while index < len(lines) and not lines[index].startswith(("@@ ", "diff --git ")):
+            line = lines[index]
+            if line.startswith("\\ No newline at end of file"):
+                index += 1
+                continue
+            if line.startswith(" "):
+                observed_old += 1
+                observed_new += 1
+            elif line.startswith("-"):
+                observed_old += 1
+            elif line.startswith("+"):
+                observed_new += 1
+            else:
+                return False
+            index += 1
+        if observed_old != expected_old or observed_new != expected_new:
+            return False
+    return found_hunk
 
 
 def normalize_response_text(raw: str) -> tuple[str, tuple[str, ...]]:
@@ -97,6 +136,8 @@ def validate_response_text(raw: str) -> tuple[dict[str, Any] | None, list[str]]:
                 errors.append("proposed fix contains an unsafe path or binary patch")
             if not patch.endswith("\n"):
                 errors.append("proposed fix must end with a newline")
+            if not unified_diff_hunks_are_valid(patch):
+                errors.append("proposed fix hunk line counts do not match headers")
     elif isinstance(fix, dict) and set(fix) == FIX_FIELDS and fix.get("status") not in {"NOT_NEEDED", "BLOCKED"}:
         errors.append("candidate fix status is invalid")
     elif isinstance(fix, dict) and set(fix) == FIX_FIELDS and (
@@ -167,6 +208,20 @@ def score(record: dict[str, Any]) -> dict[str, Any]:
                 fix = value.get("candidate_fix", {})
                 if "patch_id" in arguments and arguments["patch_id"] != fix.get("patch_id"):
                     errors.append("task patch id does not match candidate fix")
+        expected_finding = record.get("expected_finding")
+        if isinstance(expected_finding, dict):
+            findings = review.get("findings", []) if isinstance(review, dict) else []
+            matched = any(
+                isinstance(finding, dict)
+                and finding.get("path") == expected_finding.get("path")
+                and finding.get("line") == expected_finding.get("line")
+                and finding.get("evidence") == expected_finding.get("evidence")
+                for finding in findings
+            )
+            if not matched:
+                errors.append("expected held-out finding was not reported")
+            if isinstance(review, dict) and review.get("verdict") != "REQUEST_CHANGES":
+                errors.append("held-out defect verdict must request changes")
     text = json.dumps(value, sort_keys=True).lower() if value else str(record.get("response", "")).lower()
     required = ["impact", "recommendation", "test"]
     if prompt_id == "pr-agent-fix":

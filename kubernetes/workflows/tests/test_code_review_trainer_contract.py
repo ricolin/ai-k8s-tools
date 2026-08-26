@@ -130,6 +130,41 @@ def test_quality_gate_rejects_mismatched_diff_headers() -> None:
     assert "proposed fix file headers do not match diff sections" in errors
 
 
+def test_quality_gate_rejects_mismatched_hunk_line_counts() -> None:
+    generated = generator.record("C", 0)
+    answer = json.loads(generated["messages"][2]["content"])
+    answer["candidate_fix"]["unified_diff"] = answer["candidate_fix"]["unified_diff"].replace(
+        "@@ -18 +18,3 @@", "@@ -18,2 +18,4 @@"
+    )
+
+    _, errors = quality_gate.validate_response_text(json.dumps(answer))
+
+    assert "proposed fix hunk line counts do not match headers" in errors
+
+
+def test_generated_candidate_patches_have_exact_hunk_counts() -> None:
+    cases = list(generator.LANGUAGE_CASES) + list(generator.HELDOUT_CASES)
+    for case in cases:
+        answer = generator.response("C", 0, case, "train", "sha256:" + ("a" * 64))
+        _, errors = quality_gate.validate_response_text(json.dumps(answer))
+        assert "proposed fix hunk line counts do not match headers" not in errors
+
+
+def test_release_c_cases_cover_all_splits_and_both_review_states() -> None:
+    for case_index in range(len(generator.LANGUAGE_CASES)):
+        selected = [
+            generator.record("C", index)
+            for index in range(case_index, 384, len(generator.LANGUAGE_CASES))
+        ]
+        states = [
+            (record["split"], json.loads(record["messages"][-1]["content"])["review"]["verdict"])
+            for record in selected
+        ]
+        assert {split for split, _ in states} == set(generator.SPLIT_CYCLE)
+        assert ("train", "REQUEST_CHANGES") in states
+        assert ("train", "APPROVE") in states
+
+
 def comparison_records() -> list[dict[str, str]]:
     records = []
     for stage in quality_gate.STAGES:
@@ -222,6 +257,41 @@ def test_comparison_prompts_match_live_request_shape() -> None:
     assert payload["contract"]["identifier_rules"]["finding.evidence"].startswith("exact value")
 
 
+def test_heldout_prompts_do_not_reuse_training_cases() -> None:
+    prompts = generator.heldout_comparison_prompts()
+    training_signatures = {(case["path"], case["snippet"]) for case in generator.LANGUAGE_CASES}
+
+    assert len(prompts) == 6
+    for prompt in prompts:
+        payload = json.loads(prompt["messages"][1]["content"])
+        evidence = payload["review_packet"]["evidence"][0]
+        assert (evidence["path"], evidence["snippet"]) not in training_signatures
+        assert prompt["expected_finding"] == {
+            "path": evidence["path"],
+            "line": evidence["line"],
+            "evidence": evidence["id"],
+        }
+
+
+def test_quality_gate_requires_expected_heldout_finding() -> None:
+    generated = generator.record("C", 0)
+    answer = json.loads(generated["messages"][2]["content"])
+    answer["review"]["findings"] = []
+    answer["review"]["verdict"] = "APPROVE"
+
+    result = quality_gate.score(
+        {
+            "prompt_id": "python-review",
+            "expected_reviewer_identity": answer["reviewer_identity"],
+            "expected_finding": {"path": "lib/collector.py", "line": 44, "evidence": "python-diff"},
+            "response": json.dumps(answer),
+        }
+    )
+
+    assert result["pass"] is False
+    assert "expected held-out finding was not reported" in result["contract_errors"]
+
+
 def test_checked_in_comparison_prompts_match_generator() -> None:
     checked_in = json.loads((ROOT / "kubernetes/code-review/comparison-prompts.json").read_text())
 
@@ -237,7 +307,7 @@ def test_release_c_covers_repository_and_pull_request_inputs() -> None:
 
 
 def test_release_c_training_includes_resolved_green_reviews() -> None:
-    generated = generator.record("C", 3)
+    generated = generator.record("C", len(generator.LANGUAGE_CASES) * 4)
     request = json.loads(generated["messages"][1]["content"])
     answer = json.loads(generated["messages"][2]["content"])
 
