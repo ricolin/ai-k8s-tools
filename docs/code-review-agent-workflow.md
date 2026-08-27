@@ -11,6 +11,29 @@ quality-rejected artifact keeps the `code-reviewer-c-candidate` identity and
 must be served only on an evaluation endpoint; it cannot become the production
 alias.
 
+The separate `grounded-review-v1` capability profile supports a narrower
+review-only broker. It requires a pull-request lock and a capability contract
+whose adapter digest matches the release and whose required prompt list
+includes `pr-agent-fix`. Run it with:
+
+```bash
+kubernetes/tools/ai-workflow code-agent run \
+  --release code-review-release.json \
+  --packet review-packet.json \
+  --endpoint http://code-reviewer-c-candidate/v1 \
+  --capability-contract capability-gate.json \
+  --output review-only-result
+```
+
+The broker retains the complete model response as
+`response.unvalidated.json`, validates only the grounded review contract, and
+writes a projected `response.json` containing exactly `reviewer_identity` and
+`review`. It never validates, copies into the accepted response, or executes
+the model's `candidate_fix` or `execution_plan`. A successful `run.json` uses
+`CAPABILITY_SCOPED_PASS`. Do not render a sandbox or enter the bounded
+review-fix-test loop for this profile; patch generation, plan consumption, and
+`fix-until-green` remain unsupported.
+
 The agent never invents or executes shell commands. Commands and digest-pinned
 images live in the selected profile. The model can request patch application,
 tests, patch export, and report creation through typed tools only.
@@ -78,6 +101,17 @@ kubernetes/tools/ai-workflow code-agent validate-response \
   --release code-review-release.json \
   --packet review-packet.json \
   --response response.json
+```
+
+For the review-only profile, validate the retained full response with the
+matching scoped contract:
+
+```bash
+kubernetes/tools/ai-workflow code-agent validate-response \
+  --release code-review-release.json \
+  --packet review-packet.json \
+  --response response.unvalidated.json \
+  --capability-contract capability-gate.json
 ```
 
 Validation rejects invented evidence/profile/repository IDs, unknown tools,

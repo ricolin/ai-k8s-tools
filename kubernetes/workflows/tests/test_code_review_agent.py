@@ -16,7 +16,9 @@ from ai_build_tools_k8s.code_review_agent import (
     parse_intent,
     run,
     validate_candidate_fix,
+    validate_review_capability_contract,
     validate_response,
+    validate_scoped_review_response,
 )
 from ai_build_tools_k8s.code_review_model import ContractError
 
@@ -61,6 +63,38 @@ def packet() -> dict:
             "profile_ids": ["python-unit"],
             "evidence_ids": ["diff-1"],
         }
+    }
+
+
+def capability_contract() -> dict:
+    return {
+        "schema_version": "1.0.0",
+        "status": "PASS",
+        "completion_state": "CAPABILITY_SCOPED_COMPLETE",
+        "profile": "grounded-review-v1",
+        "model": {
+            "foundation_digest": digest("a"),
+            "adapter_digest": digest("b"),
+        },
+        "required_prompts": ["go-review", "rust-review", "yaml-review", "pr-agent-fix"],
+        "supported_prompt_intersection": [
+            "go-review",
+            "pr-agent-fix",
+            "rust-review",
+            "yaml-review",
+        ],
+        "excluded_prompts": ["bash-review", "python-review"],
+        "excluded_capabilities": [
+            "candidate-patch-generation",
+            "candidate-patch-application",
+            "execution-plan-consumption",
+            "fix-until-green",
+        ],
+        "discarded_response_fields": ["candidate_fix", "execution_plan"],
+        "required_failures": [],
+        "scoped_serving_eligible": True,
+        "full_patch_capable_promotion_eligible": False,
+        "strict_full_gate_overridden": False,
     }
 
 
@@ -178,6 +212,55 @@ def test_run_preserves_invalid_response_before_contract_validation(tmp_path: Pat
     assert json.loads((output / "response.unvalidated.json").read_text()) == invalid
     assert not (output / "response.json").exists()
     assert not (output / "run.json").exists()
+
+
+def test_scoped_run_discards_invalid_patch_and_plan(tmp_path: Path) -> None:
+    release_path = tmp_path / "release.json"
+    packet_path = tmp_path / "packet.json"
+    fixture_path = tmp_path / "fixture.json"
+    contract_path = tmp_path / "capability.json"
+    output = tmp_path / "output"
+    scoped = response()
+    scoped["candidate_fix"] = {"unsafe": "discarded"}
+    scoped["execution_plan"] = {"unsafe": "discarded"}
+    for path, value in (
+        (release_path, release()),
+        (packet_path, packet()),
+        (fixture_path, scoped),
+        (contract_path, capability_contract()),
+    ):
+        path.write_text(json.dumps(value))
+
+    run(release_path, packet_path, output, "", fixture_path, 10, contract_path)
+
+    assert json.loads((output / "response.unvalidated.json").read_text()) == scoped
+    assert json.loads((output / "response.json").read_text()) == {
+        "reviewer_identity": scoped["reviewer_identity"],
+        "review": scoped["review"],
+    }
+    run_result = json.loads((output / "run.json").read_text())
+    assert run_result["status"] == "CAPABILITY_SCOPED_PASS"
+    assert run_result["discarded_response_fields"] == ["candidate_fix", "execution_plan"]
+
+
+def test_scoped_review_requires_pull_request_capability_and_lock() -> None:
+    contract = capability_contract()
+    assert validate_review_capability_contract(contract, release()) == contract
+
+    missing_capability = capability_contract()
+    missing_capability["required_prompts"].remove("pr-agent-fix")
+    with pytest.raises(ContractError, match="does not include pull-request review"):
+        validate_review_capability_contract(missing_capability, release())
+
+    repository_packet = packet()
+    repository_packet["reference_index"]["pull_request_lock_ids"] = []
+    with pytest.raises(ContractError, match="exactly one pull-request lock"):
+        validate_scoped_review_response(
+            response(),
+            release(),
+            repository_packet,
+            capability_contract(),
+        )
 
 
 def test_request_distinguishes_finding_and_evidence_ids() -> None:

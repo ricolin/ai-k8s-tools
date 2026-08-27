@@ -79,6 +79,15 @@ UNIFIED_DIFF_RULES = {
     ),
     "terminal_newline": "required",
 }
+SCOPED_REVIEW_PROFILE = "grounded-review-v1"
+SCOPED_REVIEW_PROMPT = "pr-agent-fix"
+SCOPED_DISCARDED_FIELDS = ["candidate_fix", "execution_plan"]
+SCOPED_EXCLUDED_CAPABILITIES = {
+    "candidate-patch-generation",
+    "candidate-patch-application",
+    "execution-plan-consumption",
+    "fix-until-green",
+}
 LANGUAGE_SUFFIXES = {
     "bash": {".bash", ".sh"},
     "go": {".go"},
@@ -597,6 +606,69 @@ def validate_response(response: dict[str, Any], release: dict[str, Any], packet:
     return response
 
 
+def validate_review_capability_contract(
+    contract: dict[str, Any], release: dict[str, Any]
+) -> dict[str, Any]:
+    validate_workflow_candidate(release)
+    require(contract.get("schema_version") == SCHEMA_VERSION, "unsupported capability schema")
+    require(contract.get("status") == "PASS", "review capability gate did not pass")
+    require(
+        contract.get("completion_state") == "CAPABILITY_SCOPED_COMPLETE",
+        "review capability is not complete",
+    )
+    require(contract.get("profile") == SCOPED_REVIEW_PROFILE, "unsupported review capability profile")
+    model = contract.get("model")
+    require(isinstance(model, dict), "capability model identity is required")
+    require(model.get("adapter_digest") == release["adapter_digest"], "capability adapter differs from release")
+    required_prompts = contract.get("required_prompts")
+    require(
+        isinstance(required_prompts, list) and SCOPED_REVIEW_PROMPT in required_prompts,
+        "capability does not include pull-request review",
+    )
+    require(
+        contract.get("discarded_response_fields") == SCOPED_DISCARDED_FIELDS,
+        "capability discard policy is invalid",
+    )
+    excluded = contract.get("excluded_capabilities")
+    require(
+        isinstance(excluded, list) and SCOPED_EXCLUDED_CAPABILITIES <= set(excluded),
+        "capability does not exclude patch and plan execution",
+    )
+    require(contract.get("required_failures") == [], "capability has required prompt failures")
+    require(contract.get("scoped_serving_eligible") is True, "capability is not scoped-serving eligible")
+    require(
+        contract.get("full_patch_capable_promotion_eligible") is False,
+        "scoped capability cannot grant patch-capable promotion",
+    )
+    require(contract.get("strict_full_gate_overridden") is False, "scoped capability overrides the full gate")
+    return contract
+
+
+def validate_scoped_review_response(
+    response: dict[str, Any],
+    release: dict[str, Any],
+    packet: dict[str, Any],
+    contract: dict[str, Any],
+) -> dict[str, Any]:
+    validate_review_capability_contract(contract, release)
+    index = validate_packet(packet)
+    require(
+        len(index["pull_request_lock_ids"]) == 1,
+        "scoped agent review requires exactly one pull-request lock",
+    )
+    require(
+        isinstance(response, dict)
+        and set(response) == {"reviewer_identity", "review", "candidate_fix", "execution_plan"},
+        "response fields are invalid",
+    )
+    require(response["reviewer_identity"] == release["adapter_digest"], "reviewer identity mismatch")
+    validate_review(response["review"], index["evidence_ids"])
+    return {
+        "reviewer_identity": response["reviewer_identity"],
+        "review": response["review"],
+    }
+
+
 def make_request(release: dict[str, Any], packet: dict[str, Any]) -> dict[str, Any]:
     validate_workflow_candidate(release)
     index = validate_packet(packet)
@@ -696,7 +768,15 @@ def response_from_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
-def run(release_path: Path, packet_path: Path, output: Path, endpoint: str, fixture: Path | None, timeout: int) -> None:
+def run(
+    release_path: Path,
+    packet_path: Path,
+    output: Path,
+    endpoint: str,
+    fixture: Path | None,
+    timeout: int,
+    capability_contract_path: Path | None = None,
+) -> None:
     release = load_json(release_path)
     packet = load_json(packet_path)
     payload = make_request(release, packet)
@@ -709,17 +789,28 @@ def run(release_path: Path, packet_path: Path, output: Path, endpoint: str, fixt
         write_json(output / "response-envelope.json", envelope)
         response = response_from_envelope(envelope)
     write_json(output / "response.unvalidated.json", response)
-    validate_response(response, release, packet)
-    write_json(output / "response.json", response)
-    write_json(
-        output / "run.json",
-        {
-            "schema_version": SCHEMA_VERSION,
-            "status": "PASS",
-            "transport": "fixture" if fixture else "openai-compatible-http",
-            "reviewer_identity": release["adapter_digest"],
-        },
-    )
+    if capability_contract_path is not None:
+        capability_contract = load_json(capability_contract_path)
+        validated = validate_scoped_review_response(response, release, packet, capability_contract)
+        status = "CAPABILITY_SCOPED_PASS"
+    else:
+        validated = validate_response(response, release, packet)
+        status = "PASS"
+    write_json(output / "response.json", validated)
+    run_result = {
+        "schema_version": SCHEMA_VERSION,
+        "status": status,
+        "transport": "fixture" if fixture else "openai-compatible-http",
+        "reviewer_identity": release["adapter_digest"],
+    }
+    if capability_contract_path is not None:
+        run_result.update(
+            {
+                "capability_profile": SCOPED_REVIEW_PROFILE,
+                "discarded_response_fields": SCOPED_DISCARDED_FIELDS,
+            }
+        )
+    write_json(output / "run.json", run_result)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -735,6 +826,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--release", required=True)
     validate.add_argument("--packet", required=True)
     validate.add_argument("--response", required=True)
+    validate.add_argument("--capability-contract", default="")
 
     intent = commands.add_parser("parse-intent")
     intent.add_argument("--text", required=True)
@@ -776,6 +868,7 @@ def build_parser() -> argparse.ArgumentParser:
     execute.add_argument("--endpoint", default="")
     execute.add_argument("--response-fixture", default="")
     execute.add_argument("--timeout", type=int, default=600)
+    execute.add_argument("--capability-contract", default="")
     return parser
 
 
@@ -825,11 +918,18 @@ def main() -> None:
                 ),
             )
         elif args.command == "validate-response":
-            validate_response(
-                load_json(Path(args.response)),
-                load_json(Path(args.release)),
-                load_json(Path(args.packet)),
-            )
+            response = load_json(Path(args.response))
+            release = load_json(Path(args.release))
+            packet = load_json(Path(args.packet))
+            if args.capability_contract:
+                validate_scoped_review_response(
+                    response,
+                    release,
+                    packet,
+                    load_json(Path(args.capability_contract)),
+                )
+            else:
+                validate_response(response, release, packet)
         elif args.command == "run":
             require(args.endpoint or args.response_fixture, "endpoint or response fixture is required")
             run(
@@ -839,6 +939,7 @@ def main() -> None:
                 args.endpoint,
                 Path(args.response_fixture) if args.response_fixture else None,
                 args.timeout,
+                Path(args.capability_contract) if args.capability_contract else None,
             )
     except ContractError as error:
         raise SystemExit(f"contract error: {error}") from error
