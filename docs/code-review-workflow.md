@@ -119,6 +119,32 @@ applies to the evidence and implements the accepted correction. Comparison
 evidence also records token counts, EOS termination, and generation-limit
 status.
 
+When a model is intentionally released for a smaller review surface, keep the
+full gate above as diagnostic evidence and run the separate capability gate:
+
+```bash
+python /opt/ai-code-review/capability_gate.py \
+  --base-responses /workspace/runs/RUN_ID/code-review/base/responses.jsonl \
+  --heldout-responses /workspace/runs/RUN_ID/code-review/heldout/responses.jsonl \
+  --required-prompts go-review,rust-review,yaml-review,pr-agent-fix \
+  --output /workspace/runs/RUN_ID/code-review/capability-gate.json
+```
+
+`grounded-review-v1` is an explicit review-only contract, not an automatic
+best-effort filter. It requires at least three declared prompt families to pass
+at one immutable C adapter on both suites. Each accepted response must be one
+complete JSON object, copy its reviewer identity, report a grounded defect and
+`REQUEST_CHANGES`, preserve the finding schema, terminate by EOS, and remain
+below the generation limit. The report lists the declared prompt allowlist and
+every excluded prompt.
+
+The broker must project only `reviewer_identity` and `review` from a scoped
+response. `candidate_fix` and `execution_plan` remain in raw evidence but are
+discarded; patch generation, patch application, plan consumption, and
+fix-until-green are unsupported. A scoped pass may be labeled
+`CAPABILITY_SCOPED_COMPLETE` and used by a review-only broker, but it does not
+turn a failed full gate into patch-capable production approval.
+
 ## Create And Serve Release C
 
 Create `code-review-release.json` with `ai-code-review-model create-release`.

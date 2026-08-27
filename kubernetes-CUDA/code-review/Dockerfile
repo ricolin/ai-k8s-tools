@@ -23,6 +23,7 @@ COPY kubernetes-CUDA/common/serve_text_adapter.py ./serve_reviewer.py
 COPY kubernetes-CUDA/code-review/generate_dataset.py ./generate_dataset.py
 COPY kubernetes-CUDA/code-review/evaluate_reviewer.py ./evaluate_reviewer.py
 COPY kubernetes-CUDA/code-review/quality_gate.py ./quality_gate.py
+COPY kubernetes-CUDA/code-review/capability_gate.py ./capability_gate.py
 COPY kubernetes/workflows/src/ai_build_tools_k8s/__init__.py ./ai_build_tools_k8s/__init__.py
 COPY kubernetes/workflows/src/ai_build_tools_k8s/workflow.py ./ai_build_tools_k8s/workflow.py
 COPY kubernetes/workflows/src/ai_build_tools_k8s/code_review_model.py ./ai_build_tools_k8s/code_review_model.py
