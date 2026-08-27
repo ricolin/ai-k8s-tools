@@ -377,6 +377,31 @@ def canonical_json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
 
 
+def unified_diff_postimage(patch: str) -> str:
+    """Return the new-side text from a single-hunk synthetic fixture patch."""
+    result: list[str] = []
+    in_hunk = False
+    for line in patch.splitlines():
+        if line.startswith("@@ "):
+            if in_hunk:
+                raise ValueError("synthetic fixture patch contains multiple hunks")
+            in_hunk = True
+            continue
+        if not in_hunk:
+            continue
+        if line.startswith("diff --git "):
+            raise ValueError("synthetic fixture patch contains multiple sections")
+        if line.startswith((" ", "+")):
+            result.append(line[1:])
+        elif line.startswith("-") or line.startswith("\\ No newline at end of file"):
+            continue
+        else:
+            raise ValueError("synthetic fixture patch contains an invalid hunk body")
+    if not in_hunk:
+        raise ValueError("synthetic fixture patch does not contain a hunk")
+    return "\n".join(result)
+
+
 def digest_record(record: dict[str, Any]) -> str:
     material = {key: value for key, value in record.items() if key != "record_digest"}
     return f"sha256:{hashlib.sha256(canonical_json(material)).hexdigest()}"
@@ -698,6 +723,7 @@ def comparison_prompts(
                 "id": prompt_id,
                 "expected_reviewer_identity": identity,
                 "expected_patch_preimage": case["snippet"],
+                "expected_patch_postimage": unified_diff_postimage(case["patch"]),
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": canonical_json(payload).decode()},

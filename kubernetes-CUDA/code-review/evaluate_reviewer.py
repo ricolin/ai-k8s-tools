@@ -122,8 +122,9 @@ def evaluate(config_path: Path) -> None:
                     max_new_tokens=int(config["max_new_tokens"]),
                     pad_token_id=tokenizer.eos_token_id,
                 )
+            generated_tokens = generated[0, inputs["input_ids"].shape[1] :]
             response = response_prefix + tokenizer.decode(
-                generated[0, inputs["input_ids"].shape[1] :],
+                generated_tokens,
                 skip_special_tokens=True,
             )
             raw_response = response
@@ -139,7 +140,20 @@ def evaluate(config_path: Path) -> None:
                 "foundation_digest": config["foundation_digest"],
                 "adapter_digest": stage.get("adapter_digest"),
                 "prompt_digest": f"sha256:{hashlib.sha256(canonical_json(prompt)).hexdigest()}",
-                "decoding": {"do_sample": False, "max_new_tokens": int(config["max_new_tokens"])},
+                "decoding": {
+                    "do_sample": False,
+                    "max_new_tokens": int(config["max_new_tokens"]),
+                    "prompt_tokens": int(inputs["input_ids"].shape[1]),
+                    "completion_tokens": int(generated_tokens.shape[0]),
+                    "terminated_by_eos": bool(
+                        generated_tokens.shape[0]
+                        and generated_tokens[-1].item() == tokenizer.eos_token_id
+                    ),
+                    "hit_max_new_tokens": bool(
+                        generated_tokens.shape[0] == int(config["max_new_tokens"])
+                        and generated_tokens[-1].item() != tokenizer.eos_token_id
+                    ),
+                },
                 "contract_errors": errors,
                 "response": response,
                 "response_normalizations": list(normalizations),
@@ -148,6 +162,8 @@ def evaluate(config_path: Path) -> None:
                 record["expected_finding"] = prompt["expected_finding"]
             if "expected_patch_preimage" in prompt:
                 record["expected_patch_preimage"] = prompt["expected_patch_preimage"]
+            if "expected_patch_postimage" in prompt:
+                record["expected_patch_postimage"] = prompt["expected_patch_postimage"]
             if normalizations:
                 record["raw_response_sha256"] = (
                     f"sha256:{hashlib.sha256(raw_response.encode()).hexdigest()}"

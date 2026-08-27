@@ -1,5 +1,6 @@
 [
   {
+    "expected_patch_postimage": "def append(value, values=None):\n    if values is None:\n        values = []\n    values.append(value); return values",
     "expected_patch_preimage": "def append(value, values=[]): values.append(value); return values",
     "expected_reviewer_identity": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
     "id": "python-review",
@@ -15,6 +16,7 @@
     ]
   },
   {
+    "expected_patch_postimage": "for _, job := range jobs {\n    go func(current Job) { run(current) }(job)\n}",
     "expected_patch_preimage": "for _, job := range jobs {\n    go func() { run(job) }()\n}",
     "expected_reviewer_identity": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
     "id": "go-review",
@@ -30,6 +32,7 @@
     ]
   },
   {
+    "expected_patch_postimage": "let value = parse(input).map_err(ServiceError::InvalidInput)?;",
     "expected_patch_preimage": "let value = parse(input).unwrap();",
     "expected_reviewer_identity": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
     "id": "rust-review",
@@ -45,6 +48,7 @@
     ]
   },
   {
+    "expected_patch_postimage": "while IFS= read -r file; do\n  upload \"$file\"\ndone <<< \"$FILES\"",
     "expected_patch_preimage": "for file in $FILES; do upload $file; done",
     "expected_reviewer_identity": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
     "id": "bash-review",
@@ -60,6 +64,7 @@
     ]
   },
   {
+    "expected_patch_postimage": "      uses: vendor/action@0123456789abcdef0123456789abcdef01234567 # v1",
     "expected_patch_preimage": "      uses: vendor/action@main",
     "expected_reviewer_identity": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
     "id": "yaml-review",
@@ -75,6 +80,7 @@
     ]
   },
   {
+    "expected_patch_postimage": "def append(value, values=None):\n    if values is None:\n        values = []\n    values.append(value); return values",
     "expected_patch_preimage": "def append(value, values=[]): values.append(value); return values",
     "expected_reviewer_identity": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
     "id": "pr-agent-fix",

@@ -127,6 +127,27 @@ def unified_diff_preimage(patch: str) -> str | None:
     return "\n".join(result)
 
 
+def unified_diff_postimage(patch: str) -> str | None:
+    """Return the exact new-side text for a single-hunk, single-file patch."""
+    lines = patch.splitlines()
+    hunk_indexes = [index for index, line in enumerate(lines) if HUNK_HEADER.fullmatch(line)]
+    if len(hunk_indexes) != 1 or len([line for line in lines if line.startswith("diff --git ")]) != 1:
+        return None
+    result: list[str] = []
+    index = hunk_indexes[0] + 1
+    while index < len(lines) and not lines[index].startswith(("@@ ", "diff --git ")):
+        line = lines[index]
+        if line.startswith("\\ No newline at end of file"):
+            index += 1
+            continue
+        if line.startswith((" ", "+")):
+            result.append(line[1:])
+        elif not line.startswith("-"):
+            return None
+        index += 1
+    return "\n".join(result)
+
+
 def normalize_response_text(raw: str) -> tuple[str, tuple[str, ...]]:
     if raw.startswith("{%") and raw.endswith("%}"):
         return raw[:1] + raw[2:-2], ("qwen-template-brace-wrapper",)
@@ -283,12 +304,19 @@ def score(record: dict[str, Any]) -> dict[str, Any]:
             if isinstance(review, dict) and review.get("verdict") != "REQUEST_CHANGES":
                 errors.append("held-out defect verdict must request changes")
         expected_preimage = record.get("expected_patch_preimage")
-        if record.get("stage") == "C" and isinstance(expected_preimage, str):
+        expected_postimage = record.get("expected_patch_postimage")
+        if record.get("stage") == "C" and (
+            isinstance(expected_preimage, str) or isinstance(expected_postimage, str)
+        ):
             fix = value.get("candidate_fix")
             if not isinstance(fix, dict) or fix.get("status") != "PROPOSED":
                 errors.append("evaluated defect requires a proposed fix")
-            elif unified_diff_preimage(str(fix.get("unified_diff", ""))) != expected_preimage:
-                errors.append("proposed fix preimage does not match supplied evidence")
+            else:
+                patch = str(fix.get("unified_diff", ""))
+                if isinstance(expected_preimage, str) and unified_diff_preimage(patch) != expected_preimage:
+                    errors.append("proposed fix preimage does not match supplied evidence")
+                if isinstance(expected_postimage, str) and unified_diff_postimage(patch) != expected_postimage:
+                    errors.append("proposed fix postimage does not match the accepted correction")
     text = json.dumps(value, sort_keys=True).lower() if value else str(record.get("response", "")).lower()
     required = ["impact", "recommendation", "test"]
     if prompt_id == "pr-agent-fix":

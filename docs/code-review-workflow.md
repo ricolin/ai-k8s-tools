@@ -93,6 +93,13 @@ foundation/dataset identities, and an unchanged parent digest for B and C.
 The direct `render-training-job` command remains a break-glass diagnostic path;
 it is not the accepted end-to-end workflow.
 
+The trainer masks system and user tokens and trains only the assistant answer.
+It fails before optimization when a rendered record would exceed
+`sequence_length` or when the non-thinking Qwen prompt is not an exact prefix
+of the full conversation. `training-result.json` records train and validation
+token ranges plus final validation loss. Retain and compare multiple optimizer
+checkpoints for quality tuning instead of assuming the final step is best.
+
 ## Compare And Gate
 
 Run `/opt/ai-code-review/evaluate_reviewer.py` with the frozen
@@ -106,6 +113,11 @@ python /opt/ai-code-review/quality_gate.py \
 
 Do not promote C when the gate fails. A rejected candidate may be served only
 with `--serving-tier evaluation`; it remains explicitly promotion-blocked.
+For Release C, frozen prompts carry expected old-side and accepted new-side
+text outside the messages sent to the model. The gate checks that a patch both
+applies to the evidence and implements the accepted correction. Comparison
+evidence also records token counts, EOS termination, and generation-limit
+status.
 
 ## Create And Serve Release C
 

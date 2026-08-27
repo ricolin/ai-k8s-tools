@@ -4,13 +4,15 @@ import argparse
 import hashlib
 import json
 import os
+import statistics
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 
 STAGES = {"A", "B", "C"}
-TRAINING_SPLITS = {"train"}
+TRAINING_SPLITS = frozenset({"train"})
+VALIDATION_SPLITS = frozenset({"validation"})
 
 
 class TrainingContractError(ValueError):
@@ -127,7 +129,9 @@ def validate_training_config(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-def load_training_records(config: dict[str, Any]) -> list[dict[str, Any]]:
+def load_training_records(
+    config: dict[str, Any], splits: frozenset[str] = TRAINING_SPLITS
+) -> list[dict[str, Any]]:
     root = Path(config["dataset_root"])
     manifest_path = Path(config["dataset_manifest"])
     manifest = json.loads(manifest_path.read_text())
@@ -140,9 +144,9 @@ def load_training_records(config: dict[str, Any]) -> list[dict[str, Any]]:
         if not raw.strip():
             continue
         record = json.loads(raw)
-        if record.get("split") in TRAINING_SPLITS and record.get("stage") in allowed_stages:
+        if record.get("split") in splits and record.get("stage") in allowed_stages:
             selected.append(record)
-    require(selected, "no training records match the selected stages")
+    require(selected, f"no {','.join(sorted(splits))} records match the selected stages")
     return selected
 
 
@@ -155,24 +159,60 @@ class SupervisedFineTuningDataset:
     def __len__(self) -> int:
         return len(self.records)
 
-    def __getitem__(self, index: int) -> dict[str, list[int]]:
+    def tokenized_record(self, index: int) -> dict[str, list[int]]:
         messages = self.records[index]["messages"]
         prompt = messages[:-1]
         full_ids = self.tokenizer.apply_chat_template(
             messages,
             tokenize=True,
             add_generation_prompt=False,
-        )[: self.max_length]
+            enable_thinking=False,
+        )
         prompt_ids = self.tokenizer.apply_chat_template(
             prompt,
             tokenize=True,
             add_generation_prompt=True,
-        )[: self.max_length]
+            enable_thinking=False,
+        )
+        record_id = self.records[index]["id"]
+        require(
+            full_ids[: len(prompt_ids)] == prompt_ids,
+            f"record {record_id} chat-template prompt is not a prefix of the full conversation",
+        )
+        require(
+            len(full_ids) <= self.max_length,
+            f"record {record_id} has {len(full_ids)} tokens and exceeds sequence_length {self.max_length}",
+        )
         labels = list(full_ids)
         for offset in range(min(len(prompt_ids), len(labels))):
             labels[offset] = -100
-        require(any(value != -100 for value in labels), f"record {self.records[index]['id']} has no trainable tokens")
+        require(any(value != -100 for value in labels), f"record {record_id} has no trainable tokens")
         return {"input_ids": list(full_ids), "attention_mask": [1] * len(full_ids), "labels": labels}
+
+    def __getitem__(self, index: int) -> dict[str, list[int]]:
+        return self.tokenized_record(index)
+
+    def token_stats(self) -> dict[str, int | float]:
+        lengths = []
+        for index in range(len(self.records)):
+            item = self.tokenized_record(index)
+            full = len(item["input_ids"])
+            target = sum(value != -100 for value in item["labels"])
+            lengths.append((full, full - target, target))
+        return {
+            "record_count": len(self.records),
+            "sequence_length": self.max_length,
+            "full_tokens_min": min(item[0] for item in lengths),
+            "full_tokens_median": float(statistics.median(item[0] for item in lengths)),
+            "full_tokens_max": max(item[0] for item in lengths),
+            "prompt_tokens_min": min(item[1] for item in lengths),
+            "prompt_tokens_median": float(statistics.median(item[1] for item in lengths)),
+            "prompt_tokens_max": max(item[1] for item in lengths),
+            "target_tokens_min": min(item[2] for item in lengths),
+            "target_tokens_median": float(statistics.median(item[2] for item in lengths)),
+            "target_tokens_max": max(item[2] for item in lengths),
+            "target_tokens_total": sum(item[2] for item in lengths),
+        }
 
 
 class SupervisedDataCollator:
@@ -283,6 +323,7 @@ def train(config_path: Path) -> None:
         require(f"sha256:{parent_before}" == config["parent_adapter_digest"], "parent adapter digest mismatch")
 
     records = load_training_records(config)
+    validation_records = load_training_records(config, VALIDATION_SPLITS)
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, local_files_only=True, trust_remote_code=False)
     if tokenizer.pad_token_id is None:
         require(tokenizer.eos_token_id is not None, "tokenizer has no pad or EOS token")
@@ -313,6 +354,11 @@ def train(config_path: Path) -> None:
         )
     model.enable_input_require_grads()
     dataset = SupervisedFineTuningDataset(records, tokenizer, int(training["sequence_length"]))
+    validation_dataset = SupervisedFineTuningDataset(
+        validation_records, tokenizer, int(training["sequence_length"])
+    )
+    train_token_stats = dataset.token_stats()
+    validation_token_stats = validation_dataset.token_stats()
     arguments = TrainingArguments(
         output_dir=str(output / "checkpoints"),
         overwrite_output_dir=False,
@@ -331,6 +377,8 @@ def train(config_path: Path) -> None:
         save_strategy="steps",
         save_steps=int(training["save_steps"]),
         save_total_limit=int(training.get("save_total_limit", 3)),
+        eval_strategy="steps",
+        eval_steps=int(training["save_steps"]),
         logging_steps=int(training.get("logging_steps", 5)),
         report_to=[],
         remove_unused_columns=False,
@@ -343,10 +391,12 @@ def train(config_path: Path) -> None:
         model=model,
         args=arguments,
         train_dataset=dataset,
+        eval_dataset=validation_dataset,
         data_collator=SupervisedDataCollator(tokenizer.pad_token_id),
     )
     identities = gather_rank_identities(torch, world_size, rank)
     result = trainer.train(resume_from_checkpoint=config.get("resume_checkpoint") or None)
+    validation_result = trainer.evaluate()
     trainer.accelerator.wait_for_everyone()
 
     if trainer.is_world_process_zero():
@@ -385,8 +435,12 @@ def train(config_path: Path) -> None:
                     * int(training["gradient_accumulation_steps"])
                 ),
                 "train_records": len(records),
+                "validation_records": len(validation_records),
+                "train_token_stats": train_token_stats,
+                "validation_token_stats": validation_token_stats,
                 "global_step": result.global_step,
                 "training_loss": result.training_loss,
+                "validation_loss": validation_result["eval_loss"],
                 "config_digest": f"sha256:{hashlib.sha256(canonical_json(config)).hexdigest()}",
             },
         )

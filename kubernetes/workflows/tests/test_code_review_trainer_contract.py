@@ -167,6 +167,9 @@ def test_generated_candidate_patches_have_exact_hunk_counts() -> None:
         _, errors = quality_gate.validate_response_text(json.dumps(answer))
         assert "proposed fix hunk line counts do not match headers" not in errors
         assert quality_gate.unified_diff_preimage(case["patch"]) == case["snippet"]
+        assert quality_gate.unified_diff_postimage(case["patch"]) == generator.unified_diff_postimage(
+            case["patch"]
+        )
 
 
 def test_release_c_cases_cover_all_splits_and_both_review_states() -> None:
@@ -301,6 +304,9 @@ def test_comparison_prompts_match_live_request_shape() -> None:
     assert payload["contract"]["reference_index"] == payload["review_packet"]["reference_index"]
     assert payload["contract"]["unified_diff_rules"] == generator.UNIFIED_DIFF_RULES
     assert prompts[-1]["expected_patch_preimage"] == payload["review_packet"]["evidence"][0]["snippet"]
+    assert prompts[-1]["expected_patch_postimage"] == generator.unified_diff_postimage(
+        generator.LANGUAGE_CASES[0]["patch"]
+    )
 
 
 def test_heldout_prompts_do_not_reuse_training_cases() -> None:
@@ -318,6 +324,8 @@ def test_heldout_prompts_do_not_reuse_training_cases() -> None:
             "evidence": evidence["id"],
         }
         assert prompt["expected_patch_preimage"] == evidence["snippet"]
+        case = next(case for case in generator.HELDOUT_CASES if case["path"] == evidence["path"])
+        assert prompt["expected_patch_postimage"] == generator.unified_diff_postimage(case["patch"])
 
 
 def test_quality_gate_requires_applicable_heldout_patch_preimage() -> None:
@@ -340,6 +348,30 @@ def test_quality_gate_requires_applicable_heldout_patch_preimage() -> None:
 
     assert result["pass"] is False
     assert "proposed fix preimage does not match supplied evidence" in result["contract_errors"]
+
+
+def test_quality_gate_requires_accepted_patch_postimage() -> None:
+    generated = generator.record("C", 0)
+    answer = json.loads(generated["messages"][2]["content"])
+    answer["candidate_fix"]["unified_diff"] = answer["candidate_fix"]["unified_diff"].replace(
+        "values = []", "values = [value]"
+    )
+
+    result = quality_gate.score(
+        {
+            "stage": "C",
+            "prompt_id": "python-review",
+            "expected_reviewer_identity": answer["reviewer_identity"],
+            "expected_patch_preimage": generator.LANGUAGE_CASES[0]["snippet"],
+            "expected_patch_postimage": generator.unified_diff_postimage(
+                generator.LANGUAGE_CASES[0]["patch"]
+            ),
+            "response": json.dumps(answer),
+        }
+    )
+
+    assert result["pass"] is False
+    assert "proposed fix postimage does not match the accepted correction" in result["contract_errors"]
 
 
 def test_quality_gate_rejects_digest_shaped_patch_id() -> None:
@@ -510,3 +542,32 @@ def test_neutral_training_runtime_keeps_the_release_chain_contract(tmp_path: Pat
     validated = trainer.validate_training_config(value)
     assert validated["stage"] == "B"
     assert trainer.SupervisedFineTuningDataset.__name__ == "SupervisedFineTuningDataset"
+
+
+class FakeChatTokenizer:
+    def apply_chat_template(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        tokenize: bool,
+        add_generation_prompt: bool,
+        enable_thinking: bool,
+    ) -> list[int]:
+        assert tokenize is True
+        assert enable_thinking is False
+        prompt = [1, 2, 3]
+        return prompt if add_generation_prompt else prompt + list(range(4, 4 + len(messages[-1]["content"])))
+
+
+def test_training_dataset_masks_non_thinking_prompt_and_rejects_truncation() -> None:
+    record = {
+        "id": "record-1",
+        "messages": [{"role": "user", "content": "x"}, {"role": "assistant", "content": "ok"}],
+    }
+    dataset = trainer.SupervisedFineTuningDataset([record], FakeChatTokenizer(), 8)
+
+    assert dataset[0]["labels"] == [-100, -100, -100, 4, 5]
+    assert dataset.token_stats()["target_tokens_total"] == 2
+    dataset.max_length = 4
+    with pytest.raises(trainer.TrainingContractError, match="exceeds sequence_length"):
+        dataset[0]
