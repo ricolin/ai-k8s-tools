@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import runpy
 import subprocess
 from pathlib import Path
 
@@ -272,8 +273,9 @@ def test_request_distinguishes_finding_and_evidence_ids() -> None:
         "finding.evidence": "exact value from review_packet.reference_index.evidence_ids",
         "candidate_fix.patch_id": "new lowercase slug such as fix-1; not a digest or supplied identifier",
     }
-    assert "implementation and test paths" in request["messages"][0]["content"]
-    assert "It is not a digest" in request["messages"][0]["content"]
+    assert payload["release"] == {"adapter_digest": digest("b")}
+    assert "Return only one compact JSON object" in request["messages"][0]["content"]
+    assert "not a digest or supplied identifier" in request["messages"][0]["content"]
     assert "never emit an unprefixed source line" in request["messages"][0]["content"]
     assert payload["contract"]["unified_diff_rules"] == {
         "body_line_prefixes": {"addition": "+", "context": " ", "deletion": "-"},
@@ -283,7 +285,7 @@ def test_request_distinguishes_finding_and_evidence_ids() -> None:
         "old_count": "number of context and deletion body lines; omit ,1",
         "preimage": (
             "context and deletion text after removing its one-character prefix must reproduce "
-            "supplied source evidence exactly and in order"
+            "the supplied source evidence exactly and in order"
         ),
         "single_line_replacement": (
             "use @@ -LINE +LINE @@ followed by -exact-source and +replacement; use "
@@ -299,6 +301,52 @@ def test_request_distinguishes_finding_and_evidence_ids() -> None:
         "performance",
         "testing",
         "style",
+    ]
+
+
+def test_runtime_request_matches_evaluated_prompt_contract() -> None:
+    generator = runpy.run_path(
+        str(Path(__file__).parents[3] / "kubernetes-CUDA/code-review/generate_dataset.py")
+    )
+    value = packet()
+    value.update(
+        {
+            "instruction": (
+                "Review the supplied pull-request evidence, propose a minimal patch, "
+                "and select the supplied test profile."
+            ),
+            "evidence": [
+                {
+                    "id": "diff-1",
+                    "path": "tests/test_loader.py",
+                    "line": 39,
+                    "snippet": "    def test_load_with_sucess(self):",
+                }
+            ],
+        }
+    )
+    expected_payload = generator["request_payload"](
+        digest("b"),
+        "repo-1",
+        "pr-1",
+        "python-unit",
+        "diff-1",
+        {
+            "path": "tests/test_loader.py",
+            "line": 39,
+            "snippet": "    def test_load_with_sucess(self):",
+        },
+        value["instruction"],
+    )
+
+    request = make_request(release(), value)
+
+    assert request["messages"] == [
+        {"role": "system", "content": generator["SYSTEM_PROMPT"]},
+        {
+            "role": "user",
+            "content": generator["canonical_json"](expected_payload).decode(),
+        },
     ]
 
 

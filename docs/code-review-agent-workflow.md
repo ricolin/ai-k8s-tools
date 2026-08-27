@@ -34,6 +34,11 @@ the model's `candidate_fix` or `execution_plan`. A successful `run.json` uses
 review-fix-test loop for this profile; patch generation, plan consumption, and
 `fix-until-green` remain unsupported.
 
+The live broker request uses the same compact system prompt, contract ordering,
+release identity projection, and canonical JSON serialization as the frozen
+training and comparison prompts. Prompt-parity tests prevent an apparently
+passing comparison gate from being applied to a different live request shape.
+
 The agent never invents or executes shell commands. Commands and digest-pinned
 images live in the selected profile. The model can request patch application,
 tests, patch export, and report creation through typed tools only.
