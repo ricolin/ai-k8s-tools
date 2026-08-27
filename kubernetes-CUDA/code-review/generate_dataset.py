@@ -314,9 +314,13 @@ SYSTEM_PROMPT = (
     "performance, testing, and style. Allowed candidate-fix statuses are PROPOSED, NOT_NEEDED, and BLOCKED. A proposed "
     "patch_id must be a new lowercase slug such as fix-1, not a digest or supplied identifier. A proposed unified_diff "
     "must begin with diff --git, contain exactly one --- and one +++ header for each diff --git file section, and end "
-    "with a newline. In each hunk, the old count must equal context plus deleted lines and the new count must equal "
-    "context plus added lines. Deletion and context lines must reproduce the supplied source evidence exactly; never "
-    "invent preimage source or unrelated files. "
+    "with a newline. Every hunk header must have exactly the form @@ -OLD_START[,OLD_COUNT] "
+    "+NEW_START[,NEW_COUNT] @@ with no trailing section label. Every hunk body line must start with one space for "
+    "context, - for deletion, or + for addition; never emit an unprefixed source line. The old count is the number "
+    "of context plus deletion body lines and the new count is the number of context plus addition body lines; omit "
+    ",1. For a one-line replacement use @@ -LINE +LINE @@, then -exact-source and +replacement; when it expands to "
+    "multiple replacement lines use +LINE,NEW_COUNT. Deletion and context text after removing its prefix must "
+    "reproduce the supplied source evidence exactly and in order; never invent preimage source or unrelated files. "
     "The decoded unified_diff must end with that newline, so its serialized JSON string must place \\n "
     "immediately before the closing quote. Encode every newline inside a JSON string as \\n; "
     "review.tests, review.unknowns, and candidate_fix.expected_tests must always be arrays of strings. Never invent "
@@ -346,6 +350,26 @@ TOOL_ARGUMENT_KEYS = {
     "inspect_diff": ["pull_request_lock_id"],
     "inspect_repository": ["repository_lock_id"],
     "run_profile": ["profile_id", "repository_lock_id"],
+}
+UNIFIED_DIFF_RULES = {
+    "body_line_prefixes": {
+        "addition": "+",
+        "context": " ",
+        "deletion": "-",
+    },
+    "hunk_header": "@@ -OLD_START[,OLD_COUNT] +NEW_START[,NEW_COUNT] @@",
+    "hunk_header_suffix": "forbidden",
+    "new_count": "number of context and addition body lines; omit ,1",
+    "old_count": "number of context and deletion body lines; omit ,1",
+    "preimage": (
+        "context and deletion text after removing its one-character prefix must reproduce "
+        "the supplied source evidence exactly and in order"
+    ),
+    "single_line_replacement": (
+        "use @@ -LINE +LINE @@ followed by -exact-source and +replacement; use "
+        "+LINE,NEW_COUNT when the replacement has multiple lines"
+    ),
+    "terminal_newline": "required",
 }
 
 
@@ -418,6 +442,7 @@ def request_payload(
                 "finding.evidence": "exact value from review_packet.reference_index.evidence_ids",
                 "candidate_fix.patch_id": "new lowercase slug such as fix-1; not a digest or supplied identifier",
             },
+            "unified_diff_rules": UNIFIED_DIFF_RULES,
         },
     }
 

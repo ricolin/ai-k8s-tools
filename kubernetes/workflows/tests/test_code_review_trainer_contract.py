@@ -63,6 +63,7 @@ def test_dataset_copies_distinct_reviewer_identities() -> None:
     assert "no Markdown fences" in first["messages"][0]["content"]
     assert "Every task cleanup_required must be true" in first["messages"][0]["content"]
     assert "must begin with diff --git" in first["messages"][0]["content"]
+    assert "never emit an unprefixed source line" in first["messages"][0]["content"]
 
 
 def test_quality_gate_rejects_wrong_reviewer_identity() -> None:
@@ -140,6 +141,23 @@ def test_quality_gate_rejects_mismatched_hunk_line_counts() -> None:
     _, errors = quality_gate.validate_response_text(json.dumps(answer))
 
     assert "proposed fix hunk line counts do not match headers" in errors
+
+
+def test_quality_gate_rejects_noop_patch() -> None:
+    generated = generator.record("C", 0)
+    answer = json.loads(generated["messages"][2]["content"])
+    answer["candidate_fix"]["unified_diff"] = (
+        "diff --git a/src/cache.py b/src/cache.py\n"
+        "--- a/src/cache.py\n"
+        "+++ b/src/cache.py\n"
+        "@@ -18 +18 @@\n"
+        "-unchanged\n"
+        "+unchanged\n"
+    )
+
+    _, errors = quality_gate.validate_response_text(json.dumps(answer))
+
+    assert "proposed fix does not change source content" in errors
 
 
 def test_generated_candidate_patches_have_exact_hunk_counts() -> None:
@@ -281,6 +299,7 @@ def test_comparison_prompts_match_live_request_shape() -> None:
         "style",
     ]
     assert payload["contract"]["reference_index"] == payload["review_packet"]["reference_index"]
+    assert payload["contract"]["unified_diff_rules"] == generator.UNIFIED_DIFF_RULES
     assert prompts[-1]["expected_patch_preimage"] == payload["review_packet"]["evidence"][0]["snippet"]
 
 

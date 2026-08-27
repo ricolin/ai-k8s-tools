@@ -73,6 +73,39 @@ def unified_diff_hunks_are_valid(patch: str) -> bool:
     return found_hunk
 
 
+def unified_diff_hunks_change_content(patch: str) -> bool:
+    """Require at least one hunk whose old and new bodies differ."""
+    lines = patch.splitlines()
+    found_hunk = False
+    changed = False
+    index = 0
+    while index < len(lines):
+        if HUNK_HEADER.fullmatch(lines[index]) is None:
+            index += 1
+            continue
+        found_hunk = True
+        old: list[str] = []
+        new: list[str] = []
+        index += 1
+        while index < len(lines) and not lines[index].startswith(("@@ ", "diff --git ")):
+            line = lines[index]
+            if line.startswith("\\ No newline at end of file"):
+                index += 1
+                continue
+            if line.startswith(" "):
+                old.append(line[1:])
+                new.append(line[1:])
+            elif line.startswith("-"):
+                old.append(line[1:])
+            elif line.startswith("+"):
+                new.append(line[1:])
+            else:
+                return False
+            index += 1
+        changed = changed or old != new
+    return found_hunk and changed
+
+
 def unified_diff_preimage(patch: str) -> str | None:
     """Return the exact old-side text for a single-hunk, single-file patch."""
     lines = patch.splitlines()
@@ -163,6 +196,8 @@ def validate_response_text(raw: str) -> tuple[dict[str, Any] | None, list[str]]:
                 errors.append("proposed fix must end with a newline")
             if not unified_diff_hunks_are_valid(patch):
                 errors.append("proposed fix hunk line counts do not match headers")
+            elif not unified_diff_hunks_change_content(patch):
+                errors.append("proposed fix does not change source content")
     elif isinstance(fix, dict) and set(fix) == FIX_FIELDS and fix.get("status") not in {"NOT_NEEDED", "BLOCKED"}:
         errors.append("candidate fix status is invalid")
     elif isinstance(fix, dict) and set(fix) == FIX_FIELDS and (

@@ -191,6 +191,23 @@ def test_request_distinguishes_finding_and_evidence_ids() -> None:
     }
     assert "implementation and test paths" in request["messages"][0]["content"]
     assert "It is not a digest" in request["messages"][0]["content"]
+    assert "never emit an unprefixed source line" in request["messages"][0]["content"]
+    assert payload["contract"]["unified_diff_rules"] == {
+        "body_line_prefixes": {"addition": "+", "context": " ", "deletion": "-"},
+        "hunk_header": "@@ -OLD_START[,OLD_COUNT] +NEW_START[,NEW_COUNT] @@",
+        "hunk_header_suffix": "forbidden",
+        "new_count": "number of context and addition body lines; omit ,1",
+        "old_count": "number of context and deletion body lines; omit ,1",
+        "preimage": (
+            "context and deletion text after removing its one-character prefix must reproduce "
+            "supplied source evidence exactly and in order"
+        ),
+        "single_line_replacement": (
+            "use @@ -LINE +LINE @@ followed by -exact-source and +replacement; use "
+            "+LINE,NEW_COUNT when the replacement has multiple lines"
+        ),
+        "terminal_newline": "required",
+    }
     assert payload["contract"]["enum_rules"]["finding.category"] == [
         "correctness",
         "reliability",
@@ -355,6 +372,14 @@ def test_candidate_fix_rejects_mismatched_hunk_line_counts() -> None:
     invalid["unified_diff"] = invalid["unified_diff"].replace("@@ -1 +1 @@", "@@ -1,2 +1,2 @@")
 
     with pytest.raises(ContractError, match="hunk line counts"):
+        validate_candidate_fix(invalid)
+
+
+def test_candidate_fix_rejects_noop_patch() -> None:
+    invalid = response()["candidate_fix"]
+    invalid["unified_diff"] = invalid["unified_diff"].replace("+new", "+old")
+
+    with pytest.raises(ContractError, match="does not change source content"):
         validate_candidate_fix(invalid)
 
 

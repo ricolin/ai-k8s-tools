@@ -59,6 +59,26 @@ TOOL_ARGUMENT_KEYS = {
     "export_patch": {"patch_id", "repository_lock_id"},
     "draft_review": {"evidence_ids"},
 }
+UNIFIED_DIFF_RULES = {
+    "body_line_prefixes": {
+        "addition": "+",
+        "context": " ",
+        "deletion": "-",
+    },
+    "hunk_header": "@@ -OLD_START[,OLD_COUNT] +NEW_START[,NEW_COUNT] @@",
+    "hunk_header_suffix": "forbidden",
+    "new_count": "number of context and addition body lines; omit ,1",
+    "old_count": "number of context and deletion body lines; omit ,1",
+    "preimage": (
+        "context and deletion text after removing its one-character prefix must reproduce "
+        "supplied source evidence exactly and in order"
+    ),
+    "single_line_replacement": (
+        "use @@ -LINE +LINE @@ followed by -exact-source and +replacement; use "
+        "+LINE,NEW_COUNT when the replacement has multiple lines"
+    ),
+    "terminal_newline": "required",
+}
 LANGUAGE_SUFFIXES = {
     "bash": {".bash", ".sh"},
     "go": {".go"},
@@ -104,6 +124,38 @@ def unified_diff_hunks_are_valid(patch: str) -> bool:
         if observed_old != expected_old or observed_new != expected_new:
             return False
     return found_hunk
+
+
+def unified_diff_hunks_change_content(patch: str) -> bool:
+    lines = patch.splitlines()
+    found_hunk = False
+    changed = False
+    index = 0
+    while index < len(lines):
+        if HUNK_HEADER.fullmatch(lines[index]) is None:
+            index += 1
+            continue
+        found_hunk = True
+        old: list[str] = []
+        new: list[str] = []
+        index += 1
+        while index < len(lines) and not lines[index].startswith(("@@ ", "diff --git ")):
+            line = lines[index]
+            if line.startswith("\\ No newline at end of file"):
+                index += 1
+                continue
+            if line.startswith(" "):
+                old.append(line[1:])
+                new.append(line[1:])
+            elif line.startswith("-"):
+                old.append(line[1:])
+            elif line.startswith("+"):
+                new.append(line[1:])
+            else:
+                return False
+            index += 1
+        changed = changed or old != new
+    return found_hunk and changed
 
 
 def validate_packet(packet: dict[str, Any]) -> dict[str, set[str]]:
@@ -192,6 +244,7 @@ def validate_candidate_fix(fix: dict[str, Any]) -> dict[str, Any]:
             require(".." not in parts and ".git" not in parts, "patch path escapes the source tree")
         require(before == after, "rename patches are not supported by the automated fixer")
     require(unified_diff_hunks_are_valid(patch), "candidate patch hunk line counts do not match headers")
+    require(unified_diff_hunks_change_content(patch), "candidate patch does not change source content")
     return fix
 
 
@@ -566,9 +619,14 @@ def make_request(release: dict[str, Any], packet: dict[str, Any]) -> dict[str, A
         "patch only in a disposable sandbox, runs operator-owned unit-test profiles without test-stage egress, and exports "
         "the resulting patch and report without modifying the upstream checkout. Every task cleanup_required must be true. "
         "pull_request_lock_id must be null when no pull-request lock is supplied. A proposed unified_diff must begin with "
-        "diff --git, contain --- and +++ headers, and end with a newline. In each hunk, the old count must equal context "
-        "plus deleted lines and the new count must equal context plus added lines. Deletion and context lines must reproduce "
-        "the supplied source evidence exactly; never invent preimage source or unrelated files. When source evidence "
+        "diff --git, contain --- and +++ headers, and end with a newline. Every hunk header must have exactly the form "
+        "@@ -OLD_START[,OLD_COUNT] +NEW_START[,NEW_COUNT] @@ with no trailing section label. Every hunk body line must "
+        "start with one space for context, - for deletion, or + for addition; never emit an unprefixed source line. "
+        "The old count is the number of context plus deletion body lines and the new count is the number of context plus "
+        "addition body lines; omit ,1. For a one-line replacement use @@ -LINE +LINE @@, then -exact-source and "
+        "+replacement; when it expands to multiple replacement lines use +LINE,NEW_COUNT. Deletion and context text "
+        "after removing its prefix must reproduce the supplied source evidence exactly and in order; never invent "
+        "preimage source or unrelated files. When source evidence "
         "directly shows a defect and no applied patch plus passing selected-profile "
         "result is supplied, report the finding; missing test results alone do not justify APPROVE. Encode newlines "
         "inside JSON strings and keep "
@@ -606,6 +664,7 @@ def make_request(release: dict[str, Any], packet: dict[str, Any]) -> dict[str, A
                 "finding.evidence": "exact value from review_packet.reference_index.evidence_ids",
                 "candidate_fix.patch_id": "new lowercase slug such as fix-1; not a digest or supplied identifier",
             },
+            "unified_diff_rules": UNIFIED_DIFF_RULES,
         },
     }
     return {
