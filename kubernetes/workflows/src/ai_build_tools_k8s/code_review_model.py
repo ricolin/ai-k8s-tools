@@ -351,6 +351,12 @@ def validate_serving_release(release: dict[str, Any], serving_tier: str) -> dict
     return validate_release(release, frozenset(allowed[serving_tier]))
 
 
+def validate_serving_resource_name(release: dict[str, Any], name: str, serving_tier: str) -> None:
+    require(name, "serving resource name is required")
+    if serving_tier != "evaluation":
+        require(name == release["serving_model_name"], "serving resource name does not match release state")
+
+
 def render_training_job(
     name: str,
     namespace: str,
@@ -583,7 +589,7 @@ def render_node_local_serving(
     serving_tier: str = "production",
 ) -> dict[str, Any]:
     validate_serving_release(release, serving_tier)
-    require(name == release["serving_model_name"], "serving resource name does not match release state")
+    validate_serving_resource_name(release, name, serving_tier)
     require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
     if image_pull_policy == "Never":
         require(":" in serving_image and "@" not in serving_image, "node-local image requires a tag")
@@ -668,6 +674,7 @@ def render_node_local_serving(
         "ai-k8s-tools.ricolin.dev/promotion-state": release["promotion_state"],
         "ai-k8s-tools.ricolin.dev/promotion-blocked": str(release["promotion_blocked"]).lower(),
         "ai-k8s-tools.ricolin.dev/serving-tier": serving_tier,
+        "ai-k8s-tools.ricolin.dev/serving-model-name": release["serving_model_name"],
     }
     if node_local_image_id:
         annotations["ai-k8s-tools.ricolin.dev/node-local-image-id"] = node_local_image_id
@@ -893,7 +900,7 @@ def render_serving(
     serving_tier: str = "production",
 ) -> dict[str, Any]:
     validate_serving_release(release, serving_tier)
-    require(name == release["serving_model_name"], "serving resource name does not match release state")
+    validate_serving_resource_name(release, name, serving_tier)
     require_image(vllm_image, "vllm_image")
     require_image(verifier_image, "verifier_image")
     predictor: dict[str, Any] = {
@@ -964,6 +971,7 @@ def render_serving(
                 "ai-k8s-tools.ricolin.dev/promotion-state": release["promotion_state"],
                 "ai-k8s-tools.ricolin.dev/promotion-blocked": str(release["promotion_blocked"]).lower(),
                 "ai-k8s-tools.ricolin.dev/serving-tier": serving_tier,
+                "ai-k8s-tools.ricolin.dev/serving-model-name": release["serving_model_name"],
             },
         },
         "spec": {"predictor": predictor},

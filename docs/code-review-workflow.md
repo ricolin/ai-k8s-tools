@@ -113,6 +113,10 @@ python /opt/ai-code-review/quality_gate.py \
 
 Do not promote C when the gate fails. A rejected candidate may be served only
 with `--serving-tier evaluation`; it remains explicitly promotion-blocked.
+An evaluation resource may use a unique Kubernetes name so multiple retained
+candidates do not replace one another. Its served-model name remains the model
+identity recorded in the release. Canary and production resources must use that
+release model name as their Kubernetes name.
 For Release C, frozen prompts carry expected old-side and accepted new-side
 text outside the messages sent to the model. The gate checks that a patch both
 applies to the evidence and implements the accepted correction. Comparison

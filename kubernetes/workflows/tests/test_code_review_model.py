@@ -101,7 +101,7 @@ def test_release_lifecycle_blocks_rejected_candidates_from_production() -> None:
         validate_release(rejected)
     evaluation = render_node_local_serving(
         rejected,
-        "code-reviewer-c-candidate",
+        "code-reviewer-q4-s120-scoped",
         "ai-workflows",
         "reviewer:v1",
         "workspace",
@@ -114,11 +114,35 @@ def test_release_lifecycle_blocks_rejected_candidates_from_production() -> None:
         True,
         "evaluation",
     )
+    assert evaluation["metadata"]["name"] == "code-reviewer-q4-s120-scoped"
     assert evaluation["metadata"]["annotations"]["ai-k8s-tools.ricolin.dev/promotion-blocked"] == "true"
+    assert (
+        evaluation["metadata"]["annotations"]["ai-k8s-tools.ricolin.dev/serving-model-name"]
+        == "code-reviewer-c-candidate"
+    )
+    args = evaluation["spec"]["predictor"]["containers"][0]["args"]
+    assert args[args.index("--model-name") + 1] == "code-reviewer-c-candidate"
     with pytest.raises(ContractError, match="promotion state is not allowed"):
         render_node_local_serving(
             rejected,
             "code-reviewer-c",
+            "ai-workflows",
+            "reviewer:v1",
+            "workspace",
+            "/workspace/foundation",
+            "/workspace/adapter",
+            "accelerator",
+            "h200",
+            "Never",
+            digest("9"),
+            True,
+            "production",
+        )
+
+    with pytest.raises(ContractError, match="serving resource name does not match release state"):
+        render_node_local_serving(
+            release(),
+            "code-reviewer-production-alias",
             "ai-workflows",
             "reviewer:v1",
             "workspace",
