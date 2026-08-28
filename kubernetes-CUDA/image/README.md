@@ -140,3 +140,33 @@ Training writes `training-command.json` and `training-result.json` beside the
 adapter directory. Automation must validate `training-result.json`; it records
 the base, dataset, parent, config, adapter, GPU-count, and effective-batch
 identities needed to resume a completed stage without retraining it.
+
+## Serve A Digest-Bound Release
+
+The image runtime also contains `serve_model.py`. It loads the normalized SDXL
+foundation plus one or two named LoRA adapters, verifies the foundation tree and
+adapter file digests before becoming Ready, and exposes a KServe-compatible
+prediction endpoint. Render the one-GPU, node-local InferenceService from the
+same locked source:
+
+```bash
+./kubernetes/tools/ai-workflow image render-node-local-serving \
+  --name image-b-watercolor-impressionism \
+  --namespace kubeflow \
+  --image ai-k8s-tools.local/image-workflow:REVISION \
+  --pvc ai-model-workspace \
+  --foundation-path /workspace/models/sdxl-base-1.0/REVISION \
+  --foundation-digest sha256:FOUNDATION \
+  --adapter watercolor /workspace/runs/RUN/image/outputs/release-a-watercolor/adapter sha256:A 1.0 \
+  --adapter impressionism /workspace/runs/RUN/image/outputs/release-b-impressionism/adapter sha256:B 1.0 \
+  --node-selector-key nvidia.com/gpu.product \
+  --node-selector-value NVIDIA-H200 \
+  --image-pull-policy Never \
+  --node-local-image-id sha256:IMAGE \
+  --tolerate-control-plane \
+  --output evidence/image-serving.json
+```
+
+POST exactly one request instance to
+`/v1/models/image-b-watercolor-impressionism:predict`. The response contains a
+real SDXL PNG as base64 plus its digest, prompt, seed, and loaded model identity.

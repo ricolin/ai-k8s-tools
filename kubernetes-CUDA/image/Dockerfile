@@ -43,6 +43,7 @@ COPY kubernetes-CUDA/image/generate_demo_dataset.py ./generate_demo_dataset.py
 COPY kubernetes-CUDA/image/compose_parent.py ./compose_parent.py
 COPY kubernetes-CUDA/image/train_stage.py ./train_stage.py
 COPY kubernetes-CUDA/image/generate_comparison.py ./generate_comparison.py
+COPY kubernetes-CUDA/image/serve_model.py ./serve_model.py
 
 RUN useradd --create-home --uid 65532 --shell /usr/sbin/nologin ai-trainer
 USER 65532:65532

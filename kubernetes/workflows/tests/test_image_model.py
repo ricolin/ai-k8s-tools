@@ -12,6 +12,7 @@ from ai_build_tools_k8s.image_model import (
     create_release_manifest,
     render_image_job,
     render_image_trainjob,
+    render_node_local_serving,
     validate_comparison_prompts,
 )
 
@@ -192,6 +193,35 @@ def test_node_local_image_requires_never_and_records_runtime_id() -> None:
         )
 
 
+def test_node_local_image_serving_loads_two_digest_bound_adapters() -> None:
+    manifest = render_node_local_serving(
+        "image-b-watercolor-impressionism",
+        "kubeflow",
+        "ai-k8s-tools.local/image-workflow:v1",
+        "workspace",
+        "/workspace/foundation",
+        digest("a"),
+        [
+            ["watercolor", "/workspace/adapter-a", digest("b"), "1.0"],
+            ["impressionism", "/workspace/adapter-b", digest("c"), "1.0"],
+        ],
+        "nvidia.com/gpu.product",
+        "NVIDIA-H200",
+        "Never",
+        digest("d"),
+        True,
+    )
+    predictor = manifest["spec"]["predictor"]
+    container = predictor["containers"][0]
+    assert container["command"] == ["python", "/opt/ai-build-tools-image/serve_model.py"]
+    assert container["args"].count("--adapter") == 2
+    assert container["resources"]["requests"]["nvidia.com/gpu"] == 1
+    assert container["imagePullPolicy"] == "Never"
+    assert predictor["volumes"][0]["persistentVolumeClaim"]["claimName"] == "workspace"
+    assert predictor["tolerations"][0]["key"] == "node-role.kubernetes.io/control-plane"
+    assert manifest["metadata"]["annotations"]["ai-k8s-tools.ricolin.dev/node-local-image-id"] == digest("d")
+
+
 def test_image_release_records_ordered_composition() -> None:
     release = create_release_manifest(
         "release-b-watercolor-detail",
@@ -228,6 +258,13 @@ assert SPEC is not None and SPEC.loader is not None
 image_train = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = image_train
 SPEC.loader.exec_module(image_train)
+
+SERVE_MODEL = Path(__file__).parents[3] / "kubernetes-CUDA/image/serve_model.py"
+SERVE_SPEC = importlib.util.spec_from_file_location("image_serve_model", SERVE_MODEL)
+assert SERVE_SPEC is not None and SERVE_SPEC.loader is not None
+image_serve = importlib.util.module_from_spec(SERVE_SPEC)
+sys.modules[SERVE_SPEC.name] = image_serve
+SERVE_SPEC.loader.exec_module(image_serve)
 
 def image_training_config(tmp_path: Path, stage: str) -> dict:
     base = tmp_path / "base"
@@ -332,3 +369,21 @@ def test_demo_impressionism_is_distinct_and_deterministic(tmp_path: Path) -> Non
     assert first["sha256"] == second["sha256"]
     assert first["sha256"] != watercolor["sha256"]
     assert "abt_impressionism" in first["caption"]
+
+
+def test_image_serving_validates_adapter_identity_and_request(tmp_path: Path) -> None:
+    adapter = tmp_path / "adapter"
+    adapter.mkdir()
+    weights = adapter / "pytorch_lora_weights.safetensors"
+    weights.write_bytes(b"adapter")
+    expected = "sha256:" + image_serve.sha256_file(weights)
+    parsed = image_serve.parse_adapter(["watercolor", str(adapter), expected, "1.0"])
+    assert parsed["digest"] == expected
+    assert parsed["scale"] == 1.0
+
+    request = image_serve.validate_instance({"prompt": "a watercolor datacenter", "seed": 260828})
+    assert request["width"] == 1024
+    assert request["height"] == 1024
+    assert request["steps"] == 30
+    with pytest.raises(ValueError, match="exactly|width"):
+        image_serve.validate_instance({"prompt": "bad", "width": 640})

@@ -253,6 +253,129 @@ def render_image_trainjob(
     }
 
 
+def render_node_local_serving(
+    name: str,
+    namespace: str,
+    image: str,
+    pvc: str,
+    foundation_path: str,
+    foundation_digest: str,
+    adapters: list[list[str]],
+    node_selector_key: str,
+    node_selector_value: str,
+    image_pull_policy: str = "Never",
+    node_local_image_id: str = "",
+    tolerate_control_plane: bool = False,
+) -> dict[str, Any]:
+    require(name and len(name) <= 63, "serving name is invalid")
+    require(namespace, "namespace is required")
+    require(image_pull_policy in {"IfNotPresent", "Never"}, "unsupported image pull policy")
+    if image_pull_policy == "Never":
+        require(":" in image and "@" not in image, "node-local image must use an explicit tag")
+        require_sha256(node_local_image_id, "node_local_image_id")
+    else:
+        require_image_digest(image, "image")
+        require(not node_local_image_id, "node_local_image_id is only valid with imagePullPolicy Never")
+    require(foundation_path.startswith("/workspace/"), "foundation must be on the workspace PVC")
+    require_sha256(foundation_digest, "foundation_digest")
+    require(len(adapters) in {1, 2}, "one or two adapters are required")
+
+    adapter_args: list[str] = []
+    adapter_identities: list[dict[str, Any]] = []
+    names: set[str] = set()
+    for adapter in adapters:
+        require(len(adapter) == 4, "adapter requires name, path, digest, and scale")
+        adapter_name, path, adapter_digest, raw_scale = adapter
+        require(adapter_name and adapter_name not in names, "adapter names must be unique")
+        names.add(adapter_name)
+        require(path.startswith("/workspace/"), "adapter must be on the workspace PVC")
+        require_sha256(adapter_digest, "adapter_digest")
+        scale = float(raw_scale)
+        require(0 < scale <= 2, "adapter scale is invalid")
+        adapter_args.extend(["--adapter", adapter_name, path, adapter_digest, str(scale)])
+        adapter_identities.append({"name": adapter_name, "digest": adapter_digest, "scale": scale})
+
+    predictor: dict[str, Any] = {
+        "automountServiceAccountToken": False,
+        "minReplicas": 1,
+        "maxReplicas": 1,
+        "securityContext": {
+            "runAsNonRoot": True,
+            "runAsUser": 65532,
+            "runAsGroup": 65532,
+            "fsGroup": 65532,
+            "seccompProfile": {"type": "RuntimeDefault"},
+        },
+        "containers": [
+            {
+                "name": "kserve-container",
+                "image": image,
+                "imagePullPolicy": image_pull_policy,
+                "command": ["python", "/opt/ai-build-tools-image/serve_model.py"],
+                "args": [
+                    "--foundation",
+                    foundation_path,
+                    "--foundation-digest",
+                    foundation_digest,
+                    "--model-name",
+                    name,
+                    *adapter_args,
+                    "--port",
+                    "8080",
+                ],
+                "env": [
+                    {"name": "HF_HUB_OFFLINE", "value": "1"},
+                    {"name": "TRANSFORMERS_OFFLINE", "value": "1"},
+                    {"name": "DIFFUSERS_OFFLINE", "value": "1"},
+                    {"name": "TOKENIZERS_PARALLELISM", "value": "false"},
+                ],
+                "ports": [{"name": "http1", "containerPort": 8080, "protocol": "TCP"}],
+                "startupProbe": {
+                    "httpGet": {"path": "/health", "port": 8080},
+                    "periodSeconds": 10,
+                    "failureThreshold": 120,
+                },
+                "readinessProbe": {
+                    "httpGet": {"path": "/health", "port": 8080},
+                    "periodSeconds": 10,
+                    "failureThreshold": 6,
+                },
+                "livenessProbe": {
+                    "httpGet": {"path": "/health", "port": 8080},
+                    "periodSeconds": 30,
+                    "failureThreshold": 3,
+                },
+                "resources": {
+                    "requests": {"nvidia.com/gpu": 1, "cpu": "4", "memory": "32Gi"},
+                    "limits": {"nvidia.com/gpu": 1, "cpu": "32", "memory": "128Gi"},
+                },
+                "securityContext": _pod_security(),
+                "volumeMounts": [{"name": "workspace", "mountPath": "/workspace", "readOnly": True}],
+            }
+        ],
+        "volumes": [{"name": "workspace", "persistentVolumeClaim": {"claimName": pvc}}],
+    }
+    if node_selector_key and node_selector_value:
+        predictor["nodeSelector"] = {node_selector_key: node_selector_value}
+    add_control_plane_tolerations(predictor, tolerate_control_plane)
+    annotations = {
+        "serving.kserve.io/deploymentMode": "Standard",
+        "ai-k8s-tools.ricolin.dev/foundation-digest": foundation_digest,
+        "ai-k8s-tools.ricolin.dev/adapters": ",".join(
+            f'{adapter["name"]}@{adapter["digest"]}:{adapter["scale"]}'
+            for adapter in adapter_identities
+        ),
+    }
+    if node_local_image_id:
+        annotations["ai-k8s-tools.ricolin.dev/node-local-image-id"] = node_local_image_id
+    return {
+        "apiVersion": "serving.kserve.io/v1beta1",
+        "kind": "InferenceService",
+        "metadata": {"name": name, "namespace": namespace, "annotations": annotations},
+        "spec": {"predictor": predictor},
+    }
+
+
 def create_release_manifest(
     name: str,
     base_digest: str,
@@ -338,6 +461,27 @@ def build_parser() -> argparse.ArgumentParser:
     trainjob.add_argument("--node-local-image-id", default="")
     trainjob.add_argument("--tolerate-control-plane", action="store_true")
     trainjob.add_argument("--output", required=True)
+
+    serving = commands.add_parser("render-node-local-serving")
+    serving.add_argument("--name", required=True)
+    serving.add_argument("--namespace", required=True)
+    serving.add_argument("--image", required=True)
+    serving.add_argument("--pvc", required=True)
+    serving.add_argument("--foundation-path", required=True)
+    serving.add_argument("--foundation-digest", required=True)
+    serving.add_argument(
+        "--adapter",
+        action="append",
+        nargs=4,
+        metavar=("NAME", "PATH", "SHA256", "SCALE"),
+        required=True,
+    )
+    serving.add_argument("--node-selector-key", default="")
+    serving.add_argument("--node-selector-value", default="")
+    serving.add_argument("--image-pull-policy", choices=("IfNotPresent", "Never"), default="Never")
+    serving.add_argument("--node-local-image-id", default="")
+    serving.add_argument("--tolerate-control-plane", action="store_true")
+    serving.add_argument("--output", required=True)
     return parser
 
 
@@ -377,6 +521,24 @@ def main() -> None:
                     args.gpu_count,
                     args.queue,
                     args.runtime,
+                    args.node_selector_key,
+                    args.node_selector_value,
+                    args.image_pull_policy,
+                    args.node_local_image_id,
+                    args.tolerate_control_plane,
+                ),
+            )
+        elif args.command == "render-node-local-serving":
+            write_json(
+                Path(args.output),
+                render_node_local_serving(
+                    args.name,
+                    args.namespace,
+                    args.image,
+                    args.pvc,
+                    args.foundation_path,
+                    args.foundation_digest,
+                    args.adapter,
                     args.node_selector_key,
                     args.node_selector_value,
                     args.image_pull_policy,
